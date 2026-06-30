@@ -1,5 +1,5 @@
 require('dotenv').config();
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { pool } = require('./db');
 
 // תפריט לדוגמא — מבוסס על התפריט האמיתי
