@@ -2,123 +2,169 @@ require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { pool } = require('./db');
 
+// תפריט לדוגמא — מבוסס על התפריט האמיתי
+const MENU = [
+  {
+    time: '07:30',
+    name: 'ארוחת בוקר',
+    items: [
+      { item: '2 פרוסות לחם', qty: '2 פרוסות' },
+      { item: 'ביצה / גבינה לבנה', qty: 'מנה אחת' },
+      { item: 'ירק חתוך', qty: 'לפי רצון' },
+    ],
+  },
+  {
+    time: '10:00',
+    name: 'ארוחת ביניים',
+    items: [
+      { item: 'פרי', qty: '1 יחידה' },
+      { item: 'כוס חלב', qty: '200 מ"ל' },
+    ],
+  },
+  {
+    time: '13:00',
+    name: 'ארוחת צהריים',
+    items: [
+      { item: 'בשר / דג / עוף', qty: '50 גרם' },
+      { item: 'אורז / פסטה / לחם', qty: 'כוס מבושל' },
+      { item: '2 סוגי ירק', qty: '2 כפות כל אחד' },
+    ],
+  },
+  {
+    time: '16:00',
+    name: 'ארוחת ביניים',
+    items: [
+      { item: 'פרי / ירק', qty: '1 יחידה' },
+      { item: 'ביסקוויט / לחמנייה', qty: '2 יחידות' },
+    ],
+  },
+  {
+    time: '19:00',
+    name: 'ארוחת ערב',
+    items: [
+      { item: 'מרק ירקות / פסטה', qty: 'קערה' },
+      { item: 'גבינה / ביצה', qty: 'מנה' },
+      { item: 'לחם', qty: 'פרוסה' },
+    ],
+  },
+  {
+    time: '12:00',
+    name: 'נוזלים',
+    items: [
+      { item: 'מים / מיץ מדולל', qty: '3 כוסות לאורך היום' },
+    ],
+  },
+];
+
 async function seed() {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // מחיקת נתוני demo קיימים
     await client.query(`DELETE FROM users WHERE username IN ('demo_super','demo_dan','platform_admin')`);
 
     const hash = await bcrypt.hash('Demo1234!', 12);
     const adminHash = await bcrypt.hash('Admin5678!', 12);
 
-    // אדמין פלטפורמה
     const { rows: [admin] } = await client.query(
       `INSERT INTO users (display_name, username, password_hash, is_admin)
-       VALUES ('מנהל מערכת','platform_admin',$1,true) RETURNING id`,
-      [adminHash]
+       VALUES ('מנהל מערכת','platform_admin',$1,true) RETURNING id`, [adminHash]
     );
 
-    // מבקר
     const { rows: [supervisor] } = await client.query(
       `INSERT INTO users (display_name, username, password_hash)
-       VALUES ('אמא','demo_super',$1) RETURNING id`,
-      [hash]
+       VALUES ('אמא','demo_super',$1) RETURNING id`, [hash]
     );
 
-    // מבוקר
     const { rows: [monitored] } = await client.query(
       `INSERT INTO users (display_name, username, password_hash)
-       VALUES ('דני','demo_dan',$1) RETURNING id`,
-      [hash]
+       VALUES ('דני','demo_dan',$1) RETURNING id`, [hash]
     );
 
-    // קישור מבקר-מבוקר
     await client.query(
       `INSERT INTO supervision_links (supervisor_id, monitored_id) VALUES ($1,$2)`,
       [supervisor.id, monitored.id]
     );
 
-    // לוח בקרה
     const today = new Date();
-    const start = new Date(today); start.setDate(today.getDate() - 3);
-    const end = new Date(today); end.setDate(today.getDate() + 25);
+    const start = new Date(today); start.setDate(today.getDate() - 5);
+    const end = new Date(today); end.setDate(today.getDate() + 30);
 
     const { rows: [plan] } = await client.query(
       `INSERT INTO plans
          (supervisor_id, monitored_id, name, type, start_date, end_date,
           visibility_mode, photo_required, alert_threshold_minutes, notify_on_completion)
        VALUES ($1,$2,'תפריט של דני','meal',$3,$4,'daily',false,30,true) RETURNING id`,
-      [supervisor.id, monitored.id, fmtDate(start), fmtDate(end)]
+      [supervisor.id, monitored.id, fmt(start), fmt(end)]
     );
 
-    // שורות תפריט (שבועי, א-ש)
-    const menuItems = [
-      { time: '08:00', name: 'דייסת שיבולת שועל', qty: 'קערה' },
-      { time: '10:30', name: 'יוגורט עם פרות', qty: '200 גרם' },
-      { time: '13:00', name: 'אורז עם עוף', qty: 'מנה' },
-      { time: '15:30', name: 'תפוח', qty: '1' },
-      { time: '19:00', name: 'סלט ירקות', qty: 'קערה גדולה' },
-    ];
-
+    // הוספת כל שורות התפריט לכל ימות השבוע
     const itemIds = [];
     for (let dow = 0; dow <= 6; dow++) {
-      for (const mi of menuItems) {
-        const { rows: [item] } = await client.query(
-          `INSERT INTO plan_items (plan_id, day_of_week, scheduled_time, item_name, quantity)
-           VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-          [plan.id, dow, mi.time, mi.name, mi.qty]
-        );
-        itemIds.push({ id: item.id, dow, time: mi.time, name: mi.name });
+      for (const meal of MENU) {
+        for (const mi of meal.items) {
+          const { rows: [item] } = await client.query(
+            `INSERT INTO plan_items (plan_id, day_of_week, scheduled_time, item_name, quantity)
+             VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+            [plan.id, dow, meal.time, mi.item, mi.qty]
+          );
+          itemIds.push({ id: item.id, dow, time: meal.time, name: mi.item });
+        }
       }
     }
 
-    // completions לשלושת הימים האחרונים
-    const statuses = ['done', 'done', 'done', 'replaced', 'missed'];
-    for (let daysAgo = 1; daysAgo <= 3; daysAgo++) {
+    // completions ל-5 ימים אחרונים
+    const statusPool = ['done', 'done', 'done', 'replaced', 'done', 'missed', 'done'];
+    for (let daysAgo = 1; daysAgo <= 5; daysAgo++) {
       const d = new Date(today);
       d.setDate(today.getDate() - daysAgo);
       const dow = d.getDay();
-      const dateStr = fmtDate(d);
+      const dateStr = fmt(d);
       const dayItems = itemIds.filter(i => i.dow === dow);
 
       for (let idx = 0; idx < dayItems.length; idx++) {
-        const status = statuses[idx % statuses.length];
-        const replacedWith = status === 'replaced' ? 'ביסקוויט עם חמאת בוטנים' : null;
-        const completedAt = (status === 'done' || status === 'replaced')
-          ? `${dateStr} ${dayItems[idx].time}` : null;
+        const status = statusPool[idx % statusPool.length];
         await client.query(
           `INSERT INTO completions (plan_item_id, date, status, replaced_with, completed_at)
            VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-          [dayItems[idx].id, dateStr, status, replacedWith, completedAt]
+          [
+            dayItems[idx].id,
+            dateStr,
+            status,
+            status === 'replaced' ? 'קוטג\' עם עגבנייה' : null,
+            (status === 'done' || status === 'replaced') ? `${dateStr} ${dayItems[idx].time}` : null,
+          ]
         );
       }
     }
 
-    // Completions חלקיים להיום
+    // היום — completions חלקיים
     const todayDow = today.getDay();
     const todayItems = itemIds.filter(i => i.dow === todayDow);
     const nowHour = today.getHours();
     for (const item of todayItems) {
       const itemHour = parseInt(item.time.split(':')[0]);
       if (itemHour <= nowHour) {
-        const status = itemHour < nowHour - 1 ? 'done' : 'pending';
+        const status = itemHour < nowHour ? 'done' : 'pending';
         await client.query(
           `INSERT INTO completions (plan_item_id, date, status, completed_at)
            VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-          [item.id, fmtDate(today), status, status === 'done' ? `${fmtDate(today)} ${item.time}` : null]
+          [item.id, fmt(today), status, status === 'done' ? `${fmt(today)} ${item.time}` : null]
         );
       }
     }
 
     await client.query('COMMIT');
+
     console.log('✅ Seed הצליח!');
     console.log('');
     console.log('משתמשים לדמו:');
     console.log('  מנהל מערכת  — username: platform_admin  סיסמה: Admin5678!');
     console.log('  מבקרת (אמא) — username: demo_super      סיסמה: Demo1234!');
     console.log('  מבוקר (דני)  — username: demo_dan        סיסמה: Demo1234!');
+    console.log('');
+    console.log('תפריט:');
+    MENU.forEach(m => console.log(`  ${m.time} ${m.name} — ${m.items.map(i => i.item).join(', ')}`));
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ Seed נכשל:', err.message);
@@ -128,8 +174,6 @@ async function seed() {
   }
 }
 
-function fmtDate(d) {
-  return d.toISOString().slice(0, 10);
-}
+function fmt(d) { return d.toISOString().slice(0, 10); }
 
 seed();
