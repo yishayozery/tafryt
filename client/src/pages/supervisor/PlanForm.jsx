@@ -260,10 +260,6 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function formatTime(t) {
-  return t ? t.slice(0, 5) : '';
-}
-
 function groupByDay(items) {
   const DAY_LABELS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   const groups = {};
