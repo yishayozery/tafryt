@@ -2,7 +2,7 @@
   "name": "tafryt",
   "version": "1.0.0",
   "scripts": {
-    "build": "cd client && npm install && npm run build",
+    "build": "cd client && npm install --include=dev && npm run build",
     "start": "cd server && npm install && node src/index.js",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
