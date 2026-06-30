@@ -75,7 +75,7 @@ router.post('/invite', requireAuth, async (req, res) => {
        VALUES ($1,$2,$3) RETURNING token`,
       [req.user.id, monitored_phone, monitored_display_name]
     );
-    const link = `${process.env.CLIENT_URL}/join/${rows[0].token}`;
+    const link = `${process.env.CLIENT_URL || 'https://tafryt-kappa.vercel.app'}/join/${rows[0].token}`;
     res.json({ link, token: rows[0].token });
   } catch (err) {
     console.error(err);
@@ -160,7 +160,7 @@ router.post('/reset-link', requireAuth, async (req, res) => {
       'INSERT INTO reset_tokens (user_id) VALUES ($1) RETURNING token',
       [monitored_id]
     );
-    const resetLink = `${process.env.CLIENT_URL}/reset/${rows[0].token}`;
+    const resetLink = `${process.env.CLIENT_URL || 'https://tafryt-kappa.vercel.app'}/reset/${rows[0].token}`;
     res.json({ link: resetLink });
   } catch (err) {
     res.status(500).json({ error: 'שגיאה פנימית' });

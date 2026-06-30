@@ -26,6 +26,13 @@ export default function MonitoredList() {
     setResetLinks(p => ({ ...p, [monitoredId]: data.link }));
   }
 
+  function whatsappLink(phone, link) {
+    const digits = phone.replace(/\D/g, '');
+    const il = digits.startsWith('972') ? digits : '972' + digits.replace(/^0/, '');
+    const text = encodeURIComponent(`שלום! קישור לכניסה למערכת התפריט המבוקר:\n${link}`);
+    return `https://wa.me/${il}?text=${text}`;
+  }
+
   function copyLink(link) {
     const text = `שלום! קישור לכניסה למערכת התפריט המבוקר:\n${link}`;
     navigator.clipboard.writeText(text);
@@ -115,8 +122,17 @@ export default function MonitoredList() {
                   <div style={{ background: 'var(--gray-100)', borderRadius: 8, padding: '12px', fontSize: '0.85rem', wordBreak: 'break-all', marginBottom: 16 }}>
                     {inviteLink}
                   </div>
-                  <button className="btn btn-primary btn-full" onClick={() => copyLink(inviteLink)}>
-                    {copied ? '✓ הועתק!' : 'העתק לשליחה בווטסאפ'}
+                  <a
+                    className="btn btn-primary btn-full"
+                    href={whatsappLink(inviteForm.monitored_phone, inviteLink)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}
+                  >
+                    📲 שלח בווטסאפ
+                  </a>
+                  <button className="btn btn-secondary btn-full" style={{ marginTop: 8 }} onClick={() => copyLink(inviteLink)}>
+                    {copied ? '✓ הועתק!' : 'העתק קישור'}
                   </button>
                   <button className="btn btn-secondary btn-full" style={{ marginTop: 8 }}
                     onClick={() => { setShowInvite(false); setInviteLink(''); setInviteForm({ monitored_display_name: '', monitored_phone: '' }); window.location.reload(); }}>
