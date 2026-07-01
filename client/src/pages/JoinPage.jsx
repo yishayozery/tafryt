@@ -16,7 +16,16 @@ export default function JoinPage() {
   useEffect(() => {
     api.get(`/auth/invite-info/${token}`)
       .then(r => { setInfo(r.data); setLoading(false); })
-      .catch(err => { setError(err.response?.data?.error || 'קישור לא תקין'); setLoading(false); });
+      .catch(err => {
+        const status = err.response?.status;
+        if (status === 410) {
+          // טוקן כבר נוצל — מעבירים לכניסה
+          navigate('/login', { replace: true });
+        } else {
+          setError(err.response?.data?.error || 'קישור לא תקין');
+          setLoading(false);
+        }
+      });
   }, [token]);
 
   async function handleSubmit(e) {

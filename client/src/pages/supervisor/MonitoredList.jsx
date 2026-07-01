@@ -67,16 +67,20 @@ export default function MonitoredList() {
     return `${BASE_URL}/join/${m.invite_token}`;
   }
 
+  const loginUrl = `${BASE_URL}/login`;
+
+  function buildMessage(link) {
+    return `שלום! קישור להגדרת החשבון שלך:\n${link}\n\nלאחר ההרשמה, כניסה קבועה:\n${loginUrl}`;
+  }
+
   function whatsappLink(phone, link) {
     const digits = phone.replace(/\D/g, '');
     const il = digits.startsWith('972') ? digits : '972' + digits.replace(/^0/, '');
-    const text = encodeURIComponent(`שלום! קישור לכניסה למערכת התפריט המבוקר:\n${link}`);
-    return `https://wa.me/${il}?text=${text}`;
+    return `https://wa.me/${il}?text=${encodeURIComponent(buildMessage(link))}`;
   }
 
   function copyLink(link) {
-    const text = `שלום! קישור לכניסה למערכת התפריט המבוקר:\n${link}`;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(buildMessage(link));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
