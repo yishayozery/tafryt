@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import api from '../api/client';
 
 export function usePush() {
-  const [permission, setPermission] = useState(Notification.permission);
+  const notifSupported = typeof Notification !== 'undefined';
+  const [permission, setPermission] = useState(notifSupported ? Notification.permission : 'denied');
 
   async function requestPermission() {
+    if (!notifSupported) return 'denied';
     const result = await Notification.requestPermission();
     setPermission(result);
     if (result === 'granted') await subscribe();

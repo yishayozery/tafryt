@@ -236,7 +236,7 @@ export default function TaskView() {
                         gap: 8,
                         padding: '8px 12px',
                         marginBottom: 4,
-                        background: isMissed ? 'var(--gray-50)' : 'var(--white)',
+                        background: isMissed ? 'var(--gray-50)' : '#fff',
                         borderRadius: 8,
                         border: '1px solid var(--gray-200)',
                         opacity: isMissed ? 0.55 : 1,
@@ -250,7 +250,7 @@ export default function TaskView() {
                           <div>
                             <div style={{ fontWeight: 600, fontSize: '0.9rem', lineHeight: 1.3 }}>{item.item_name}</div>
                             {item.quantity && (
-                              <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: 2 }}>{item.quantity}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--gray-600)', marginTop: 2 }}>{item.quantity}</div>
                             )}
                             {showPlanLabel && (
                               <div style={{ fontSize: '0.7rem', color: 'var(--green)', marginTop: 2 }}>{item.plan.name}</div>
