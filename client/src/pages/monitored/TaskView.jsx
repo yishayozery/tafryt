@@ -4,28 +4,25 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePush } from '../../hooks/usePush';
 import { MonitoredLayout, StatusBadge } from '../../components/Layout';
 
-const DAY_LABELS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
-
 export default function TaskView() {
   const { user } = useAuth();
   const { permission, requestPermission } = usePush();
   const [plans, setPlans] = useState([]);
   const [allItems, setAllItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeItem, setActiveItem] = useState(null); // item that action sheet is open for
+  const [activeItem, setActiveItem] = useState(null);
   const [replaceText, setReplaceText] = useState('');
   const [photo, setPhoto] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [sheetMode, setSheetMode] = useState('main');
   const photoRef = useRef();
 
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
   const currentTime = now.toTimeString().slice(0, 5);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     setLoading(true);
@@ -44,7 +41,6 @@ export default function TaskView() {
       }
     }
 
-    // ensure completions exist
     const ensurePromises = results.map(async (item) => {
       if (!item.completion_id) {
         const { data } = await api.post(`/plans/${item.plan.id}/completions/ensure`, {
@@ -60,15 +56,12 @@ export default function TaskView() {
     setLoading(false);
   }
 
-  function visibleItems(plan, items) {
-    const planItems = items.filter(i => i.plan.id === plan.id);
-    if (plan.visibility_mode === 'on_time') {
-      return planItems.filter(i => {
-        const t = i.scheduled_time?.slice(0, 5);
-        return t <= currentTime || i.status === 'done' || i.status === 'replaced';
-      });
-    }
-    return planItems;
+  function visibleItems(items) {
+    return items.filter(i => {
+      if (i.plan.visibility_mode !== 'on_time') return true;
+      const t = i.scheduled_time?.slice(0, 5);
+      return t <= currentTime || i.status === 'done' || i.status === 'replaced';
+    });
   }
 
   async function submitDone(item) {
@@ -116,12 +109,15 @@ export default function TaskView() {
 
   function updateItem(item, data) {
     setAllItems(prev => prev.map(i =>
-      i.completion_id === item.completion_id ? { ...i, status: data.status, replaced_with: data.replaced_with, photo_url: data.photo_url } : i
+      i.completion_id === item.completion_id
+        ? { ...i, status: data.status, replaced_with: data.replaced_with, photo_url: data.photo_url }
+        : i
     ));
   }
 
   function openSheet(item) {
     setActiveItem(item);
+    setSheetMode('main');
     setReplaceText('');
     setPhoto(null);
     setError('');
@@ -134,22 +130,25 @@ export default function TaskView() {
     setError('');
   }
 
-  const [sheetMode, setSheetMode] = useState('main'); // main | replace
+  // group visible items by date+time slot
+  const visible = visibleItems(allItems);
+  const grouped = {};
+  for (const item of visible) {
+    const dateKey = item.date || today;
+    const timeKey = item.scheduled_time?.slice(0, 5) || '00:00';
+    const key = `${dateKey}__${timeKey}`;
+    if (!grouped[key]) grouped[key] = { date: dateKey, time: timeKey, items: [] };
+    grouped[key].items.push(item);
+  }
+  const slots = Object.values(grouped).sort((a, b) =>
+    (a.date + a.time).localeCompare(b.date + b.time)
+  );
 
-  function openReplace() { setSheetMode('replace'); }
-  function openMain(item) { setSheetMode('main'); openSheet(item); }
-
-  // Group all items chronologically across plans
-  const sortedItems = [...allItems].sort((a, b) => {
-    const ta = (a.date || today) + (a.scheduled_time || '');
-    const tb = (b.date || today) + (b.scheduled_time || '');
-    return ta.localeCompare(tb);
-  });
+  const showPlanLabel = plans.length > 1;
 
   return (
     <MonitoredLayout title="התפריט שלי">
       <div className="page">
-        {/* Push prompt */}
         {permission !== 'granted' && (
           <div className="push-banner">
             <p>הפעל התראות כדי לקבל תזכורות לארוחות</p>
@@ -166,53 +165,106 @@ export default function TaskView() {
 
         {loading && <div className="spinner" />}
 
-        {!loading && sortedItems.length === 0 && (
+        {!loading && slots.length === 0 && (
           <div className="empty-state">
             <p style={{ fontSize: '2rem', marginBottom: 8 }}>🥗</p>
             <p>אין משימות להיום</p>
           </div>
         )}
 
-        {sortedItems.map((item, idx) => {
-          // show plan name if multiple plans
-          const showPlanLabel = plans.length > 1;
-          const isCompleted = item.status === 'done' || item.status === 'replaced';
-          const isMissed = item.status === 'missed';
-          const dateLabel = item.date && item.date !== today
-            ? new Date(item.date + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' })
-            : null;
-
-          return (
-            <div key={`${item.completion_id || idx}`}
-              className="plan-row"
-              style={{ opacity: isMissed ? 0.55 : 1 }}>
-              <div>
-                <div className="plan-row-time">{item.scheduled_time?.slice(0, 5)}</div>
-                {dateLabel && <div style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>{dateLabel}</div>}
-              </div>
-              <div className="plan-row-info">
-                <div className="plan-row-name">{item.item_name}</div>
-                {item.quantity && <div className="plan-row-qty">{item.quantity}</div>}
-                {showPlanLabel && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--green)', marginTop: 2 }}>{item.plan.name}</div>
-                )}
-                {item.status === 'replaced' && item.replaced_with && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--orange)', marginTop: 4 }}>הוחלף ב: {item.replaced_with}</div>
-                )}
-              </div>
-              <div className="plan-row-actions">
-                {isCompleted ? (
-                  <StatusBadge status={item.status} />
-                ) : (
-                  <button className="btn btn-primary btn-sm"
-                    onClick={() => { openMain(item); setSheetMode('main'); }}>
-                    דווח
-                  </button>
-                )}
-              </div>
+        {!loading && slots.length > 0 && (
+          <>
+            {/* Column headers */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 8,
+              padding: '6px 12px',
+              marginBottom: 8,
+              background: 'var(--gray-100)',
+              borderRadius: 8,
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              color: 'var(--gray-600)',
+            }}>
+              <div>תכנון</div>
+              <div>ביצוע</div>
             </div>
-          );
-        })}
+
+            {slots.map(slot => {
+              const dateLabel = slot.date !== today
+                ? new Date(slot.date + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' })
+                : null;
+
+              return (
+                <div key={`${slot.date}__${slot.time}`} style={{ marginBottom: 16 }}>
+                  {/* Time slot header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, paddingRight: 4 }}>
+                    <span style={{ fontWeight: 700, color: 'var(--green)', fontSize: '0.95rem' }}>{slot.time}</span>
+                    {dateLabel && <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>{dateLabel}</span>}
+                  </div>
+
+                  {slot.items.map((item, idx) => {
+                    const isCompleted = item.status === 'done' || item.status === 'replaced';
+                    const isMissed = item.status === 'missed';
+
+                    return (
+                      <div key={item.completion_id || idx} style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: 8,
+                        padding: '8px 12px',
+                        marginBottom: 4,
+                        background: isMissed ? 'var(--gray-50)' : 'var(--white)',
+                        borderRadius: 8,
+                        border: '1px solid var(--gray-200)',
+                        opacity: isMissed ? 0.55 : 1,
+                        alignItems: 'center',
+                      }}>
+                        {/* תכנון */}
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem', lineHeight: 1.3 }}>{item.item_name}</div>
+                          {item.quantity && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: 2 }}>{item.quantity}</div>
+                          )}
+                          {showPlanLabel && (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--green)', marginTop: 2 }}>{item.plan.name}</div>
+                          )}
+                        </div>
+
+                        {/* ביצוע */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                          {isCompleted ? (
+                            <>
+                              <StatusBadge status={item.status} />
+                              {item.status === 'replaced' && item.replaced_with && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--orange)' }}>
+                                  במקום: {item.replaced_with}
+                                </div>
+                              )}
+                              {item.photo_url && (
+                                <img src={item.photo_url} alt="תמונה"
+                                  style={{ width: 40, height: 40, borderRadius: 4, objectFit: 'cover', marginTop: 2 }} />
+                              )}
+                            </>
+                          ) : (
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => openSheet(item)}
+                              style={{ fontSize: '0.8rem', padding: '4px 12px' }}
+                            >
+                              דווח
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </>
+        )}
 
         {/* Action Sheet */}
         {activeItem && (
@@ -224,29 +276,25 @@ export default function TaskView() {
               {sheetMode === 'main' ? (
                 <>
                   <h2 className="action-sheet-title">{activeItem.item_name}</h2>
-                  {activeItem.quantity && <p style={{ color: 'var(--gray-600)', marginBottom: 16 }}>כמות: {activeItem.quantity}</p>}
-
-                  {activeItem.plan.photo_required && (
-                    <div className="alert alert-info" style={{ marginBottom: 12 }}>
-                      צילום חובה לדיווח
-                    </div>
+                  {activeItem.quantity && (
+                    <p style={{ color: 'var(--gray-600)', marginBottom: 16 }}>כמות: {activeItem.quantity}</p>
                   )}
-
-                  {/* photo upload */}
+                  {activeItem.plan.photo_required && (
+                    <div className="alert alert-info" style={{ marginBottom: 12 }}>צילום חובה לדיווח</div>
+                  )}
                   <div className="form-group">
                     <label>{activeItem.plan.photo_required ? 'תמונה (חובה)' : 'תמונה (רשות)'}</label>
                     <input type="file" accept="image/*" capture="environment" ref={photoRef}
                       onChange={e => setPhoto(e.target.files[0])} />
                     {photo && <div style={{ fontSize: '0.8rem', color: 'var(--green)', marginTop: 4 }}>✓ {photo.name}</div>}
                   </div>
-
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <button className="btn btn-primary btn-full" disabled={submitting}
                       onClick={() => submitDone(activeItem)}>
                       ✓ {submitting ? 'שולח...' : 'אכלתי!'}
                     </button>
-                    <button className="btn btn-secondary btn-full" onClick={() => { setSheetMode('replace'); }}>
-                      החלפתי משהו אחר
+                    <button className="btn btn-secondary btn-full" onClick={() => setSheetMode('replace')}>
+                      החלפתי במשהו אחר
                     </button>
                     <button className="btn btn-ghost btn-full" onClick={closeSheet}>ביטול</button>
                   </div>
@@ -254,10 +302,13 @@ export default function TaskView() {
               ) : (
                 <>
                   <h2 className="action-sheet-title">מה אכלת במקום?</h2>
+                  <p style={{ color: 'var(--gray-600)', marginBottom: 12, fontSize: '0.9rem' }}>
+                    במקום: <strong>{activeItem.item_name}</strong>
+                  </p>
                   <div className="form-group">
-                    <label>פריט חלופי</label>
+                    <label>מה אכלת בפועל</label>
                     <input value={replaceText} onChange={e => setReplaceText(e.target.value)}
-                      placeholder="תאר מה אכלת בפועל" autoFocus />
+                      placeholder="לדוגמה: קוטג׳, בננה, לחם מלא..." autoFocus />
                   </div>
                   {activeItem.plan.photo_required && (
                     <div className="form-group">
