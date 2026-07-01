@@ -1,6 +1,5 @@
 const express = require('express');
 const multer = require('multer');
-const Anthropic = require('@anthropic-ai/sdk');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -45,6 +44,10 @@ router.post('/scan', requireAuth, upload.single('image'), async (req, res) => {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY לא מוגדר בסביבה' });
+
+  let Anthropic;
+  try { Anthropic = require('@anthropic-ai/sdk'); }
+  catch { return res.status(500).json({ error: 'מודול OCR לא זמין — @anthropic-ai/sdk חסר' }); }
 
   try {
     const client = new Anthropic({ apiKey });

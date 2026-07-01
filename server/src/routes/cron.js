@@ -153,7 +153,6 @@ router.get('/status', async (req, res) => {
 
 // POST /api/cron/test-push — שלח push test למבקר (דורש auth)
 const { requireAuth } = require('../middleware/auth');
-const { sendPush } = require('../services/push');
 router.post('/test-push', requireAuth, async (req, res) => {
   try {
     const { rows } = await db.query('SELECT push_subscription, display_name FROM users WHERE id=$1', [req.user.id]);

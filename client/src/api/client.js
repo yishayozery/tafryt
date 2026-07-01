@@ -16,6 +16,11 @@ api.interceptors.response.use(
       localStorage.removeItem('user');
       window.location.href = '/login';
     }
+    // Normalize error.data.error to always be a string (prevents React #31)
+    const d = err.response?.data;
+    if (d && typeof d.error !== 'string') {
+      d.error = d.error?.message || d.message || `שגיאת שרת (${err.response?.status})`;
+    }
     return Promise.reject(err);
   }
 );
