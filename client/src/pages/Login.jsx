@@ -17,7 +17,9 @@ export default function Login() {
     try {
       const { data } = await api.post('/auth/login', form);
       login(data.token, data.user);
-      navigate('/');
+      if (data.user.is_admin) navigate('/admin', { replace: true });
+      else if (data.user.is_monitored) navigate('/my-tasks', { replace: true });
+      else navigate('/supervisor', { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || 'שגיאה בכניסה');
     } finally {

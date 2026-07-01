@@ -56,7 +56,12 @@ router.post('/login', async (req, res) => {
     if (!valid) {
       return res.status(401).json({ error: 'שם משתמש או סיסמה שגויים' });
     }
-    res.json({ token: signToken(user), user: { id: user.id, display_name: user.display_name, username: user.username, is_admin: user.is_admin } });
+    const { rows: slinks } = await db.query(
+      'SELECT id FROM supervision_links WHERE monitored_id=$1 AND status=$2 LIMIT 1',
+      [user.id, 'active']
+    );
+    const is_monitored = slinks.length > 0;
+    res.json({ token: signToken(user), user: { id: user.id, display_name: user.display_name, username: user.username, is_admin: user.is_admin, is_monitored } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה פנימית' });
@@ -196,7 +201,7 @@ router.post('/join/:token', async (req, res) => {
 
     await db.query('UPDATE invite_tokens SET used_at = NOW() WHERE id = $1', [invite.id]);
 
-    res.status(201).json({ token: signToken(user), user });
+    res.status(201).json({ token: signToken(user), user: { ...user, is_monitored: true } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה פנימית' });
