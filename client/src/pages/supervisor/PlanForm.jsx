@@ -40,6 +40,8 @@ export default function PlanForm() {
   const [duplicateDay, setDuplicateDay] = useState(0);
   const [editItem, setEditItem] = useState(null); // { id, scheduled_time, item_name, quantity }
   const [applyDialog, setApplyDialog] = useState(null); // { fromDate, toDate }
+  const [ocrDialog, setOcrDialog] = useState(null); // null | 'loading' | { meals, selectedDays, checked }
+  const [ocrImporting, setOcrImporting] = useState(false);
 
   useEffect(() => {
     api.get('/users/monitored').then(r => setMonitored(r.data));
@@ -106,6 +108,59 @@ export default function PlanForm() {
   async function duplicateDayToWeek() {
     const { data } = await api.post(`/plans/${id}/items/duplicate-day`, { source_day: duplicateDay });
     api.get(`/plans/${id}/items`).then(r => setItems(r.data));
+  }
+
+  async function handleOcrUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setOcrDialog('loading');
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const { data } = await api.post('/ocr/scan', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const meals = data.meals || [];
+      // מבנה checked: Set של מפתחות "mealIndex-itemIndex"
+      const checked = new Set();
+      meals.forEach((meal, mi) => meal.items.forEach((_, ii) => checked.add(`${mi}-${ii}`)));
+      setOcrDialog({ meals, selectedDays: [0,1,2,3,4,5,6], checked });
+    } catch (err) {
+      setError(err.response?.data?.error || 'שגיאה בניתוח התמונה');
+      setOcrDialog(null);
+    }
+  }
+
+  async function importOcrItems() {
+    if (!ocrDialog || ocrDialog === 'loading' || ocrImporting) return;
+    const { meals, selectedDays, checked } = ocrDialog;
+    setOcrImporting(true);
+    try {
+      for (const day of selectedDays) {
+        for (let mi = 0; mi < meals.length; mi++) {
+          const meal = meals[mi];
+          for (let ii = 0; ii < meal.items.length; ii++) {
+            if (!checked.has(`${mi}-${ii}`)) continue;
+            const item = meal.items[ii];
+            await api.post(`/plans/${id}/items`, {
+              scheduled_time: meal.time,
+              item_name: item.item_name,
+              quantity: item.quantity || null,
+              day_of_week: day,
+            });
+          }
+        }
+      }
+      const { data } = await api.get(`/plans/${id}/items`);
+      setItems(data);
+      setOcrDialog(null);
+    } catch (err) {
+      setError('שגיאה בייבוא — ' + (err.response?.data?.error || err.message));
+    } finally {
+      setOcrImporting(false);
+    }
   }
 
   async function confirmSaveEdit() {
@@ -252,7 +307,18 @@ export default function PlanForm() {
         {isEdit && (
           <>
             <hr className="divider" />
-            <h2 style={{ fontWeight: 700, marginBottom: 16, fontSize: '1rem' }}>שורות תפריט</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 0 }}>שורות תפריט</h2>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                background: 'var(--green)', color: '#fff', borderRadius: 8,
+                padding: '7px 14px', fontSize: '0.85rem', fontWeight: 600,
+              }}>
+                📷 יבוא מתמונה
+                <input type="file" accept="image/*" capture="environment"
+                  style={{ display: 'none' }} onChange={handleOcrUpload} />
+              </label>
+            </div>
 
             {/* הוספת שורה */}
             <div className="card" style={{ marginBottom: 16 }}>
@@ -365,6 +431,107 @@ export default function PlanForm() {
           </>
         )}
       </div>
+
+      {/* דיאלוג OCR */}
+      {ocrDialog && (
+        <div className="action-sheet">
+          <div className="action-sheet-bg" onClick={() => !ocrImporting && setOcrDialog(null)} />
+          <div className="action-sheet-content" style={{ maxHeight: '85vh', overflowY: 'auto' }}>
+
+            {ocrDialog === 'loading' ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <div className="spinner" />
+                <p style={{ marginTop: 16, color: 'var(--gray-600)', fontSize: '0.9rem' }}>
+                  Claude מנתח את התמונה...
+                </p>
+              </div>
+            ) : (
+              <>
+                <h2 className="action-sheet-title">תוצאות ניתוח תמונה</h2>
+
+                {/* בחירת ימים */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 8 }}>
+                    החל לימים:
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {['א','ב','ג','ד','ה','ו','ש'].map((d, i) => {
+                      const sel = ocrDialog.selectedDays?.includes(i);
+                      return (
+                        <button key={i} type="button"
+                          onClick={() => setOcrDialog(prev => ({
+                            ...prev,
+                            selectedDays: sel
+                              ? prev.selectedDays.filter(x => x !== i)
+                              : [...prev.selectedDays, i],
+                          }))}
+                          style={{
+                            width: 36, height: 36, borderRadius: '50%', border: 'none',
+                            background: sel ? 'var(--green)' : 'var(--gray-200)',
+                            color: sel ? '#fff' : 'var(--gray-600)',
+                            fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
+                          }}>
+                          {d}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* רשימת ארוחות שנחלצו */}
+                {ocrDialog.meals?.map((meal, mi) => (
+                  <div key={mi} style={{ marginBottom: 12 }}>
+                    <div style={{
+                      fontWeight: 700, fontSize: '0.85rem', color: 'var(--green)',
+                      marginBottom: 6, borderBottom: '1px solid var(--gray-200)', paddingBottom: 4,
+                    }}>
+                      🕐 {meal.time}
+                    </div>
+                    {meal.items.map((item, ii) => {
+                      const key = `${mi}-${ii}`;
+                      const isChecked = ocrDialog.checked?.has(key);
+                      return (
+                        <div key={ii} style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '6px 4px', opacity: isChecked ? 1 : 0.45,
+                        }}>
+                          <input type="checkbox" checked={!!isChecked}
+                            onChange={() => setOcrDialog(prev => {
+                              const next = new Set(prev.checked);
+                              next.has(key) ? next.delete(key) : next.add(key);
+                              return { ...prev, checked: next };
+                            })}
+                            style={{ width: 18, height: 18, flexShrink: 0, cursor: 'pointer' }} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{item.item_name}</div>
+                            {item.quantity && (
+                              <div style={{ fontSize: '0.74rem', color: 'var(--gray-600)' }}>{item.quantity}</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 16, position: 'sticky', bottom: 0, background: '#fff', paddingTop: 8 }}>
+                  <button className="btn btn-primary" style={{ flex: 1 }}
+                    disabled={ocrImporting || !ocrDialog.selectedDays?.length || !ocrDialog.checked?.size}
+                    onClick={importOcrItems}>
+                    {ocrImporting
+                      ? 'מייבא...'
+                      : `הוסף לתפריט (${ocrDialog.checked?.size || 0} פריטים × ${ocrDialog.selectedDays?.length || 0} ימים)`}
+                  </button>
+                  <button className="btn btn-ghost" style={{ flex: 0.4 }}
+                    disabled={ocrImporting} onClick={() => setOcrDialog(null)}>
+                    ביטול
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* דיאלוג: מאיזה תאריך להחיל שינויים */}
       {applyDialog && (

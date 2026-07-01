@@ -12,6 +12,7 @@ const completionsRouter = require('./routes/completions');
 const statsRouter = require('./routes/stats');
 const adminRouter = require('./routes/admin');
 const cronRouter = require('./routes/cron');
+const ocrRouter = require('./routes/ocr');
 
 const app = express();
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -45,6 +46,7 @@ app.use('/api/plans/:planId/completions', completionsRouter);
 app.use('/api/plans/:planId/stats', statsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/cron', cronRouter);
+app.use('/api/ocr', ocrRouter);
 
 app.get('/api/vapid-public-key', (req, res) => {
   res.json({ key: process.env.VAPID_PUBLIC_KEY });
