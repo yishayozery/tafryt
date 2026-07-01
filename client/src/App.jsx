@@ -28,7 +28,9 @@ function RootRedirect() {
 }
 
 function RequireAuth({ children }) {
-  const { user } = useAuth();
+  // קריאה ישירה מ-localStorage כדי לא להסתמך על עדכון context אסינכרוני
+  let user = null;
+  try { user = JSON.parse(localStorage.getItem('user')); } catch {}
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }

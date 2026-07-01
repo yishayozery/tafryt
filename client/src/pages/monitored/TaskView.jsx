@@ -26,34 +26,44 @@ export default function TaskView() {
 
   async function loadData() {
     setLoading(true);
-    const { data: plansData } = await api.get('/plans/my');
-    setPlans(plansData);
+    setError('');
+    try {
+      const { data: plansData } = await api.get('/plans/my');
+      setPlans(plansData);
 
-    const results = [];
-    for (const plan of plansData) {
-      if (plan.visibility_mode === 'weekly') {
-        const weekStart = getWeekStart(today);
-        const { data } = await api.get(`/plans/${plan.id}/completions/week?start_date=${weekStart}`);
-        data.forEach(i => results.push({ ...i, plan }));
-      } else {
-        const { data } = await api.get(`/plans/${plan.id}/completions/by-date?date=${today}`);
-        data.forEach(i => results.push({ ...i, plan }));
+      const results = [];
+      for (const plan of plansData) {
+        if (plan.visibility_mode === 'weekly') {
+          const weekStart = getWeekStart(today);
+          const { data } = await api.get(`/plans/${plan.id}/completions/week?start_date=${weekStart}`);
+          data.forEach(i => results.push({ ...i, plan }));
+        } else {
+          const { data } = await api.get(`/plans/${plan.id}/completions/by-date?date=${today}`);
+          data.forEach(i => results.push({ ...i, plan }));
+        }
       }
+
+      const ensurePromises = results.map(async (item) => {
+        if (!item.completion_id) {
+          try {
+            const { data } = await api.post(`/plans/${item.plan.id}/completions/ensure`, {
+              plan_item_id: item.id,
+              date: item.date || today,
+            });
+            return { ...item, completion_id: data.id, status: data.status };
+          } catch {
+            return item;
+          }
+        }
+        return item;
+      });
+      const resolved = await Promise.all(ensurePromises);
+      setAllItems(resolved);
+    } catch (err) {
+      setError('שגיאה בטעינת הנתונים — נסה לרענן');
+    } finally {
+      setLoading(false);
     }
-
-    const ensurePromises = results.map(async (item) => {
-      if (!item.completion_id) {
-        const { data } = await api.post(`/plans/${item.plan.id}/completions/ensure`, {
-          plan_item_id: item.id,
-          date: item.date || today,
-        });
-        return { ...item, completion_id: data.id, status: data.status };
-      }
-      return item;
-    });
-    const resolved = await Promise.all(ensurePromises);
-    setAllItems(resolved);
-    setLoading(false);
   }
 
   function visibleItems(items) {
@@ -163,16 +173,27 @@ export default function TaskView() {
           </div>
         </div>
 
-        {loading && <div className="spinner" />}
+        {error && (
+          <div className="alert alert-error" style={{ marginBottom: 16 }}>
+            {error}
+            <button className="btn btn-ghost btn-sm" style={{ marginRight: 8 }} onClick={loadData}>רענן</button>
+          </div>
+        )}
 
-        {!loading && slots.length === 0 && (
+        {loading && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+            <div className="spinner" />
+          </div>
+        )}
+
+        {!loading && !error && slots.length === 0 && (
           <div className="empty-state">
             <p style={{ fontSize: '2rem', marginBottom: 8 }}>🥗</p>
             <p>אין משימות להיום</p>
           </div>
         )}
 
-        {!loading && slots.length > 0 && (
+        {!loading && !error && slots.length > 0 && (
           <>
             {/* Column headers */}
             <div style={{
