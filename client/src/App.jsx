@@ -1,7 +1,29 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Component } from 'react';
 import api from './api/client';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+
+class ErrorBoundary extends Component {
+  state = { error: null };
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) return (
+      <div style={{ padding: 32, textAlign: 'center', direction: 'rtl' }}>
+        <p style={{ fontSize: '2rem', marginBottom: 8 }}>⚠️</p>
+        <p style={{ marginBottom: 16, color: '#666' }}>משהו השתבש. נסה לרענן.</p>
+        <button onClick={() => window.location.reload()}
+          style={{ padding: '10px 24px', background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, fontSize: '1rem', cursor: 'pointer' }}>
+          רענן דף
+        </button>
+        <details style={{ marginTop: 16, fontSize: '0.75rem', color: '#999' }}>
+          <summary>פרטים</summary>
+          <pre style={{ textAlign: 'left', whiteSpace: 'pre-wrap' }}>{this.state.error?.message}</pre>
+        </details>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -37,6 +59,7 @@ function RequireAuth({ children }) {
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -68,6 +91,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

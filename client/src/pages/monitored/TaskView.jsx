@@ -402,6 +402,7 @@ const FOOD_EMOJIS = [
 ];
 
 function foodEmoji(name) {
+  if (!name) return '🍽️';
   const lower = name.toLowerCase();
   for (const { keys, emoji } of FOOD_EMOJIS) {
     if (keys.some(k => lower.includes(k))) return emoji;
