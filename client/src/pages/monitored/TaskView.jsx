@@ -223,7 +223,6 @@ export default function TaskView() {
               const isOptionSlot = slot.items.some(i => /^אפ׳\s*\d+/.test(i.quantity || ''));
 
               if (isOptionSlot) {
-                // קיבוץ לפי אפשרות
                 const groups = {};
                 for (const item of slot.items) {
                   const match = (item.quantity || '').match(/^(אפ׳\s*\d+)/);
@@ -231,76 +230,119 @@ export default function TaskView() {
                   if (!groups[key]) groups[key] = [];
                   groups[key].push(item);
                 }
-                const OPTION_LABELS = {
-                  'אפ׳ 1': 'כמו בתפריט',
-                  'אפ׳ 2': 'כמו צהריים',
-                  'אפ׳ 3': 'פיצה ושוקו',
+                const OPTION_CONFIG = {
+                  'אפ׳ 1': { label: 'כמו בתפריט', emoji: '🍽️', color: '#2d6a4f' },
+                  'אפ׳ 2': { label: 'כמו צהריים',  emoji: '🍗',  color: '#e07b39' },
+                  'אפ׳ 3': { label: 'פיצה ושוקו',  emoji: '🍕',  color: '#9b5de5' },
                 };
                 const selectedOpt = selectedOptions[slotKey];
 
                 return (
-                  <div key={slotKey} style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, paddingRight: 4 }}>
+                  <div key={slotKey} style={{ marginBottom: 20 }}>
+                    {/* כותרת */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, paddingRight: 4 }}>
                       <span style={{ fontWeight: 700, color: 'var(--green)', fontSize: '0.95rem' }}>{slot.time}</span>
                       {dateLabel && <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>{dateLabel}</span>}
-                      <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--gray-800)' }}>ערב — בחר אפשרות:</span>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--gray-800)' }}>ערב</span>
                     </div>
 
-                    {Object.entries(groups).map(([optKey, optItems]) => {
-                      const isOpen = selectedOpt === optKey;
-                      const label = OPTION_LABELS[optKey] || optKey;
-                      const anyDone = optItems.some(i => i.status === 'done' || i.status === 'replaced');
+                    <div style={{ background: 'var(--gray-50)', borderRadius: 14, padding: 12, border: '1px solid var(--gray-200)' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 10, textAlign: 'center', letterSpacing: '0.03em' }}>
+                        בחר אפשרות לערב
+                      </div>
 
-                      return (
-                        <div key={optKey} style={{
-                          marginBottom: 8,
-                          border: `1.5px solid ${isOpen ? 'var(--green)' : anyDone ? '#28a745' : 'var(--gray-200)'}`,
-                          borderRadius: 10,
-                          overflow: 'hidden',
-                          background: '#fff',
-                        }}>
-                          <button
-                            onClick={() => setSelectedOptions(prev => ({ ...prev, [slotKey]: isOpen ? null : optKey }))}
-                            style={{ width: '100%', padding: '11px 14px', background: isOpen ? 'var(--green-light)' : anyDone ? '#d4edda' : '#fff', textAlign: 'right', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700, fontSize: '0.9rem', color: isOpen ? 'var(--green)' : anyDone ? '#155724' : 'var(--gray-800)', border: 'none', cursor: 'pointer' }}
-                          >
-                            <span>{label}</span>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>{isOpen ? '▲' : '▼'}</span>
-                          </button>
+                      {Object.entries(groups).map(([optKey, optItems]) => {
+                        const cfg = OPTION_CONFIG[optKey] || { label: optKey, emoji: '🍴', color: 'var(--green)' };
+                        const isOpen = selectedOpt === optKey;
+                        const anyDone = optItems.some(i => i.status === 'done' || i.status === 'replaced');
+                        const allDone = optItems.every(i => i.status === 'done' || i.status === 'replaced');
 
-                          {isOpen && (
-                            <div style={{ borderTop: `1px solid ${isOpen ? 'var(--green)' : 'var(--gray-200)'}` }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '4px 12px', background: 'var(--gray-100)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-600)' }}>
-                                <div>תכנון</div><div>ביצוע</div>
+                        return (
+                          <div key={optKey} style={{ marginBottom: 8 }}>
+                            {/* כפתור בחירת אפשרות */}
+                            <button
+                              onClick={() => setSelectedOptions(prev => ({ ...prev, [slotKey]: isOpen ? null : optKey }))}
+                              style={{
+                                width: '100%',
+                                padding: '12px 14px',
+                                border: `2px solid ${isOpen ? cfg.color : anyDone ? '#28a745' : 'var(--gray-200)'}`,
+                                borderRadius: isOpen ? '10px 10px 0 0' : 10,
+                                background: isOpen ? `${cfg.color}12` : anyDone ? '#f0fff4' : '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>{cfg.emoji}</span>
+                              <span style={{ flex: 1, textAlign: 'right', fontWeight: 700, fontSize: '0.95rem', color: isOpen ? cfg.color : anyDone ? '#155724' : 'var(--gray-800)' }}>
+                                {cfg.label}
+                                {allDone && <span style={{ marginRight: 6, fontSize: '0.8rem' }}>✓</span>}
+                              </span>
+                              {/* Radio indicator */}
+                              <span style={{
+                                width: 22, height: 22, borderRadius: '50%',
+                                border: `2.5px solid ${isOpen ? cfg.color : 'var(--gray-400)'}`,
+                                background: isOpen ? cfg.color : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                flexShrink: 0, transition: 'all 0.15s',
+                              }}>
+                                {isOpen && <span style={{ color: '#fff', fontSize: '0.65rem', fontWeight: 900 }}>✓</span>}
+                              </span>
+                            </button>
+
+                            {/* תוכן האפשרות */}
+                            {isOpen && (
+                              <div style={{
+                                border: `2px solid ${cfg.color}`,
+                                borderTop: 'none',
+                                borderRadius: '0 0 10px 10px',
+                                background: '#fff',
+                                overflow: 'hidden',
+                              }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '5px 12px', background: `${cfg.color}10`, fontSize: '0.72rem', fontWeight: 700, color: cfg.color }}>
+                                  <div>תכנון</div><div>ביצוע</div>
+                                </div>
+                                {optItems.map((item, idx) => {
+                                  const isCompleted = item.status === 'done' || item.status === 'replaced';
+                                  const isMissed = item.status === 'missed';
+                                  return (
+                                    <div key={item.completion_id || idx} style={{
+                                      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+                                      padding: '9px 12px',
+                                      borderTop: '1px solid var(--gray-100)',
+                                      opacity: isMissed ? 0.5 : 1,
+                                      alignItems: 'center',
+                                    }}>
+                                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+                                        <span style={{ fontSize: '1.25rem', lineHeight: 1, flexShrink: 0 }}>{foodEmoji(item.item_name)}</span>
+                                        <div style={{ fontWeight: 600, fontSize: '0.85rem', lineHeight: 1.35 }}>{item.item_name}</div>
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        {isCompleted ? (
+                                          <>
+                                            <StatusBadge status={item.status} />
+                                            {item.status === 'replaced' && item.replaced_with && (
+                                              <div style={{ fontSize: '0.72rem', color: 'var(--orange)' }}>במקום: {item.replaced_with}</div>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <button className="btn btn-primary btn-sm" onClick={() => openSheet(item)}
+                                            style={{ fontSize: '0.8rem', padding: '4px 12px', background: cfg.color }}>
+                                            דווח
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                              {optItems.map((item, idx) => {
-                                const isCompleted = item.status === 'done' || item.status === 'replaced';
-                                const isMissed = item.status === 'missed';
-                                return (
-                                  <div key={item.completion_id || idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '8px 12px', borderTop: '1px solid var(--gray-100)', opacity: isMissed ? 0.55 : 1, alignItems: 'center' }}>
-                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                                      <span style={{ fontSize: '1.2rem', lineHeight: 1, flexShrink: 0 }}>{foodEmoji(item.item_name)}</span>
-                                      <div style={{ fontWeight: 600, fontSize: '0.85rem', lineHeight: 1.3 }}>{item.item_name}</div>
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                      {isCompleted ? (
-                                        <>
-                                          <StatusBadge status={item.status} />
-                                          {item.status === 'replaced' && item.replaced_with && (
-                                            <div style={{ fontSize: '0.72rem', color: 'var(--orange)' }}>במקום: {item.replaced_with}</div>
-                                          )}
-                                        </>
-                                      ) : (
-                                        <button className="btn btn-primary btn-sm" onClick={() => openSheet(item)} style={{ fontSize: '0.8rem', padding: '4px 12px' }}>דווח</button>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               }
