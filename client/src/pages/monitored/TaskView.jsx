@@ -222,14 +222,19 @@ export default function TaskView() {
                         alignItems: 'center',
                       }}>
                         {/* תכנון */}
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.9rem', lineHeight: 1.3 }}>{item.item_name}</div>
-                          {item.quantity && (
-                            <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: 2 }}>{item.quantity}</div>
-                          )}
-                          {showPlanLabel && (
-                            <div style={{ fontSize: '0.7rem', color: 'var(--green)', marginTop: 2 }}>{item.plan.name}</div>
-                          )}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                          <span style={{ fontSize: '1.4rem', lineHeight: 1, flexShrink: 0, marginTop: 1 }}>
+                            {foodEmoji(item.item_name)}
+                          </span>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: '0.9rem', lineHeight: 1.3 }}>{item.item_name}</div>
+                            {item.quantity && (
+                              <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: 2 }}>{item.quantity}</div>
+                            )}
+                            {showPlanLabel && (
+                              <div style={{ fontSize: '0.7rem', color: 'var(--green)', marginTop: 2 }}>{item.plan.name}</div>
+                            )}
+                          </div>
                         </div>
 
                         {/* ביצוע */}
@@ -341,4 +346,44 @@ function getWeekStart(dateStr) {
   const day = d.getDay();
   d.setDate(d.getDate() - day);
   return d.toISOString().slice(0, 10);
+}
+
+const FOOD_EMOJIS = [
+  { keys: ['ביצה', 'ביצים'], emoji: '🥚' },
+  { keys: ['גבינה'], emoji: '🧀' },
+  { keys: ['חלב'], emoji: '🥛' },
+  { keys: ['יוגורט'], emoji: '🫙' },
+  { keys: ['לחם', 'פרוסה', 'לחמנייה', 'פיתה', 'טוסט'], emoji: '🍞' },
+  { keys: ['אורז'], emoji: '🍚' },
+  { keys: ['פסטה', 'ספגטי', 'מקרוני'], emoji: '🍝' },
+  { keys: ['עוף', 'חזה'], emoji: '🍗' },
+  { keys: ['בשר', 'סטייק', 'קציצה', 'המבורגר'], emoji: '🥩' },
+  { keys: ['דג', 'טונה', 'סלמון'], emoji: '🐟' },
+  { keys: ['ירק', 'סלט', 'מלפפון', 'עגבנייה', 'גזר', 'פלפל', 'חסה'], emoji: '🥗' },
+  { keys: ['פרי', 'תפוח', 'בננה', 'תפוז', 'ענבים', 'אבטיח', 'מנגו'], emoji: '🍎' },
+  { keys: ['תפוח'], emoji: '🍎' },
+  { keys: ['בננה'], emoji: '🍌' },
+  { keys: ['תפוז', 'מיץ תפוזים'], emoji: '🍊' },
+  { keys: ['מרק'], emoji: '🍲' },
+  { keys: ['שוקולד', 'ממתק', 'עוגיה', 'ביסקוויט', 'עוגה'], emoji: '🍪' },
+  { keys: ['שיבולת שועל', 'דגני', 'גרנולה'], emoji: '🥣' },
+  { keys: ['אגוז', 'שקד', 'בוטן'], emoji: '🥜' },
+  { keys: ['מים', 'נוזל'], emoji: '💧' },
+  { keys: ['מיץ'], emoji: '🧃' },
+  { keys: ['שייק', 'סמות\'י'], emoji: '🥤' },
+  { keys: ['קוטג'], emoji: '🥛' },
+  { keys: ['חומוס', 'טחינה'], emoji: '🫘' },
+  { keys: ['בטטה', 'תפוח אדמה'], emoji: '🥔' },
+  { keys: ['אבוקדו'], emoji: '🥑' },
+  { keys: ['ביצת', 'חביתה', 'שקשוקה'], emoji: '🍳' },
+  { keys: ['פיצה'], emoji: '🍕' },
+  { keys: ['כריך', 'סנדוויץ'], emoji: '🥪' },
+];
+
+function foodEmoji(name) {
+  const lower = name.toLowerCase();
+  for (const { keys, emoji } of FOOD_EMOJIS) {
+    if (keys.some(k => lower.includes(k))) return emoji;
+  }
+  return '🍽️';
 }
