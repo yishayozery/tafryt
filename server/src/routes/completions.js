@@ -204,6 +204,44 @@ router.post('/ensure', requireAuth, async (req, res) => {
   }
 });
 
+// ביטול אפשרות (כשבוחרים אפשרות אחרת)
+router.post('/:completionId/cancel', requireAuth, async (req, res) => {
+  try {
+    const comp = await getCompletion(req.params.completionId, req.params.planId);
+    if (!comp) return res.status(404).json({ error: 'ביצוע לא נמצא' });
+    const plan = await getPlan(req.params.planId, req.user.id);
+    if (!plan || plan.monitored_id !== req.user.id) return res.status(403).json({ error: 'אין הרשאה' });
+    if (comp.status === 'done' || comp.status === 'replaced') {
+      return res.status(400).json({ error: 'לא ניתן לבטל ביצוע שכבר דווח' });
+    }
+    const { rows } = await db.query(
+      "UPDATE completions SET status='cancelled' WHERE id=$1 RETURNING *",
+      [comp.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'שגיאה פנימית' });
+  }
+});
+
+// שחזור אפשרות מבוטלת (שינוי בחירה)
+router.post('/:completionId/reactivate', requireAuth, async (req, res) => {
+  try {
+    const comp = await getCompletion(req.params.completionId, req.params.planId);
+    if (!comp) return res.status(404).json({ error: 'ביצוע לא נמצא' });
+    const plan = await getPlan(req.params.planId, req.user.id);
+    if (!plan || plan.monitored_id !== req.user.id) return res.status(403).json({ error: 'אין הרשאה' });
+    if (comp.status !== 'cancelled') return res.status(400).json({ error: 'הביצוע אינו מבוטל' });
+    const { rows } = await db.query(
+      "UPDATE completions SET status='pending' WHERE id=$1 RETURNING *",
+      [comp.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'שגיאה פנימית' });
+  }
+});
+
 async function getPlan(planId, userId) {
   const { rows } = await db.query(
     'SELECT * FROM plans WHERE id=$1 AND (supervisor_id=$2 OR monitored_id=$2)',

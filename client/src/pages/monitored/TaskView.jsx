@@ -4,6 +4,12 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePush } from '../../hooks/usePush';
 import { MonitoredLayout, StatusBadge } from '../../components/Layout';
 
+const OPTION_CONFIG = {
+  'אפ׳ 1': { label: 'כמו בתפריט', emoji: '🍽️', color: '#2d6a4f' },
+  'אפ׳ 2': { label: 'כמו צהריים',  emoji: '🍗',  color: '#e07b39' },
+  'אפ׳ 3': { label: 'פיצה ושוקו',  emoji: '🍕',  color: '#9b5de5' },
+};
+
 export default function TaskView() {
   const { user } = useAuth();
   const { permission, requestPermission } = usePush();
@@ -17,6 +23,8 @@ export default function TaskView() {
   const [error, setError] = useState('');
   const [sheetMode, setSheetMode] = useState('main');
   const [selectedOptions, setSelectedOptions] = useState({});
+  const [pendingConfirm, setPendingConfirm] = useState(null); // {slotKey, optKey, planId, groups}
+  const [optionLoading, setOptionLoading] = useState(false);
   const photoRef = useRef();
 
   const today = new Date().toISOString().slice(0, 10);
@@ -141,6 +149,37 @@ export default function TaskView() {
     setError('');
   }
 
+  async function confirmOption() {
+    if (!pendingConfirm || optionLoading) return;
+    const { slotKey, optKey, planId, groups } = pendingConfirm;
+    setOptionLoading(true);
+    try {
+      // ביטול כל האפשרויות האחרות
+      for (const [gKey, items] of Object.entries(groups)) {
+        if (gKey === optKey) continue;
+        for (const item of items) {
+          if (item.completion_id && item.status !== 'done' && item.status !== 'replaced' && item.status !== 'cancelled') {
+            await api.post(`/plans/${planId}/completions/${item.completion_id}/cancel`);
+            setAllItems(prev => prev.map(i => i.completion_id === item.completion_id ? { ...i, status: 'cancelled' } : i));
+          }
+        }
+      }
+      // שחזור פריטים של האפשרות הנבחרת (אם שונו בעבר)
+      for (const item of (groups[optKey] || [])) {
+        if (item.completion_id && item.status === 'cancelled') {
+          await api.post(`/plans/${planId}/completions/${item.completion_id}/reactivate`);
+          setAllItems(prev => prev.map(i => i.completion_id === item.completion_id ? { ...i, status: 'pending' } : i));
+        }
+      }
+      setSelectedOptions(prev => ({ ...prev, [slotKey]: optKey }));
+      setPendingConfirm(null);
+    } catch {
+      setError('שגיאה בבחירת האפשרות — נסה שוב');
+    } finally {
+      setOptionLoading(false);
+    }
+  }
+
   // group visible items by date+time slot
   const visible = visibleItems(allItems);
   const grouped = {};
@@ -230,90 +269,142 @@ export default function TaskView() {
                   if (!groups[key]) groups[key] = [];
                   groups[key].push(item);
                 }
-                const OPTION_CONFIG = {
-                  'אפ׳ 1': { label: 'כמו בתפריט', emoji: '🍽️', color: '#2d6a4f' },
-                  'אפ׳ 2': { label: 'כמו צהריים',  emoji: '🍗',  color: '#e07b39' },
-                  'אפ׳ 3': { label: 'פיצה ושוקו',  emoji: '🍕',  color: '#9b5de5' },
-                };
-                const selectedOpt = selectedOptions[slotKey];
+
+                // Detect confirmed selection from DB state
+                const anyGroupAllCancelled = Object.values(groups).some(items =>
+                  items.every(i => i.status === 'cancelled')
+                );
+                const confirmedOpt = anyGroupAllCancelled
+                  ? Object.keys(groups).find(gKey => !groups[gKey].every(i => i.status === 'cancelled'))
+                  : null;
+                const selectedOpt = selectedOptions[slotKey] ?? confirmedOpt ?? null;
+
+                const planId = slot.items[0]?.plan?.id;
+                const isPending = pendingConfirm?.slotKey === slotKey;
+                const pendingOpt = isPending ? pendingConfirm.optKey : null;
+                const canChange = selectedOpt
+                  ? !(groups[selectedOpt] || []).some(i => i.status === 'done' || i.status === 'replaced')
+                  : false;
+                const mode = isPending ? 'selecting' : (selectedOpt ? 'confirmed' : 'selecting');
 
                 return (
                   <div key={slotKey} style={{ marginBottom: 20 }}>
-                    {/* כותרת */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, paddingRight: 4 }}>
                       <span style={{ fontWeight: 700, color: 'var(--green)', fontSize: '0.95rem' }}>{slot.time}</span>
                       {dateLabel && <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>{dateLabel}</span>}
-                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--gray-800)' }}>ערב</span>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--gray-800)' }}>ארוחת ערב</span>
                     </div>
 
                     <div style={{ background: 'var(--gray-50)', borderRadius: 14, padding: 12, border: '1px solid var(--gray-200)' }}>
-                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 10, textAlign: 'center', letterSpacing: '0.03em' }}>
-                        בחר אפשרות לערב
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 10, textAlign: 'center' }}>
+                        {mode === 'confirmed' ? 'אפשרות ערב' : 'בחר אפשרות לערב'}
                       </div>
 
-                      {Object.entries(groups).map(([optKey, optItems]) => {
-                        const cfg = OPTION_CONFIG[optKey] || { label: optKey, emoji: '🍴', color: 'var(--green)' };
-                        const isOpen = selectedOpt === optKey;
-                        const anyDone = optItems.some(i => i.status === 'done' || i.status === 'replaced');
-                        const allDone = optItems.every(i => i.status === 'done' || i.status === 'replaced');
+                      {mode === 'selecting' && (
+                        <>
+                          {Object.entries(groups).map(([optKey]) => {
+                            const cfg = OPTION_CONFIG[optKey] || { label: optKey, emoji: '🍴', color: 'var(--green)' };
+                            const isPendingThis = pendingOpt === optKey;
+                            return (
+                              <div key={optKey} style={{ marginBottom: 8 }}>
+                                <button
+                                  onClick={() => setPendingConfirm({ slotKey, optKey, planId, groups })}
+                                  style={{
+                                    width: '100%', padding: '12px 14px',
+                                    border: `2px solid ${isPendingThis ? cfg.color : 'var(--gray-200)'}`,
+                                    borderRadius: 10,
+                                    background: isPendingThis ? `${cfg.color}12` : '#fff',
+                                    display: 'flex', alignItems: 'center', gap: 10,
+                                    cursor: 'pointer', transition: 'all 0.15s',
+                                  }}
+                                >
+                                  <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>{cfg.emoji}</span>
+                                  <span style={{ flex: 1, textAlign: 'right', fontWeight: 700, fontSize: '0.95rem', color: isPendingThis ? cfg.color : 'var(--gray-800)' }}>
+                                    {cfg.label}
+                                  </span>
+                                  <span style={{
+                                    width: 22, height: 22, borderRadius: '50%',
+                                    border: `2.5px solid ${isPendingThis ? cfg.color : 'var(--gray-400)'}`,
+                                    background: isPendingThis ? cfg.color : 'transparent',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    flexShrink: 0, transition: 'all 0.15s',
+                                  }}>
+                                    {isPendingThis && <span style={{ color: '#fff', fontSize: '0.65rem', fontWeight: 900 }}>✓</span>}
+                                  </span>
+                                </button>
+                              </div>
+                            );
+                          })}
 
-                        return (
-                          <div key={optKey} style={{ marginBottom: 8 }}>
-                            {/* כפתור בחירת אפשרות */}
-                            <button
-                              onClick={() => setSelectedOptions(prev => ({ ...prev, [slotKey]: isOpen ? null : optKey }))}
-                              style={{
-                                width: '100%',
-                                padding: '12px 14px',
-                                border: `2px solid ${isOpen ? cfg.color : anyDone ? '#28a745' : 'var(--gray-200)'}`,
-                                borderRadius: isOpen ? '10px 10px 0 0' : 10,
-                                background: isOpen ? `${cfg.color}12` : anyDone ? '#f0fff4' : '#fff',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 10,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s',
-                              }}
-                            >
-                              <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>{cfg.emoji}</span>
-                              <span style={{ flex: 1, textAlign: 'right', fontWeight: 700, fontSize: '0.95rem', color: isOpen ? cfg.color : anyDone ? '#155724' : 'var(--gray-800)' }}>
-                                {cfg.label}
-                                {allDone && <span style={{ marginRight: 6, fontSize: '0.8rem' }}>✓</span>}
-                              </span>
-                              {/* Radio indicator */}
-                              <span style={{
-                                width: 22, height: 22, borderRadius: '50%',
-                                border: `2.5px solid ${isOpen ? cfg.color : 'var(--gray-400)'}`,
-                                background: isOpen ? cfg.color : 'transparent',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                flexShrink: 0, transition: 'all 0.15s',
-                              }}>
-                                {isOpen && <span style={{ color: '#fff', fontSize: '0.65rem', fontWeight: 900 }}>✓</span>}
-                              </span>
-                            </button>
-
-                            {/* תוכן האפשרות */}
-                            {isOpen && (
+                          {isPending && pendingOpt && (() => {
+                            const cfg = OPTION_CONFIG[pendingOpt] || { label: pendingOpt, emoji: '🍴', color: 'var(--green)' };
+                            return (
                               <div style={{
-                                border: `2px solid ${cfg.color}`,
-                                borderTop: 'none',
-                                borderRadius: '0 0 10px 10px',
-                                background: '#fff',
-                                overflow: 'hidden',
+                                marginTop: 4, padding: '12px 14px', borderRadius: 12,
+                                background: `${cfg.color}10`, border: `2px solid ${cfg.color}`,
+                              }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: cfg.color, marginBottom: 4 }}>
+                                  {cfg.emoji} {cfg.label} — לאשר?
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--gray-600)', marginBottom: 10, lineHeight: 1.5 }}>
+                                  {(pendingConfirm.groups[pendingOpt] || []).map(i => i.item_name).join(' · ')}
+                                </div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  <button onClick={confirmOption} disabled={optionLoading} style={{
+                                    flex: 1, padding: '9px 0', borderRadius: 8, border: 'none',
+                                    background: cfg.color, color: '#fff', fontWeight: 700, fontSize: '0.9rem',
+                                    cursor: optionLoading ? 'wait' : 'pointer',
+                                  }}>
+                                    {optionLoading ? '...' : 'אישור'}
+                                  </button>
+                                  <button onClick={() => setPendingConfirm(null)} disabled={optionLoading} style={{
+                                    flex: 1, padding: '9px 0', borderRadius: 8,
+                                    border: '1.5px solid var(--gray-300)', background: '#fff',
+                                    fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', color: 'var(--gray-600)',
+                                  }}>
+                                    ביטול
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </>
+                      )}
+
+                      {mode === 'confirmed' && Object.entries(groups).map(([optKey, optItems]) => {
+                        const cfg = OPTION_CONFIG[optKey] || { label: optKey, emoji: '🍴', color: 'var(--green)' };
+                        const isSelected = selectedOpt === optKey;
+
+                        if (isSelected) {
+                          return (
+                            <div key={optKey} style={{ marginBottom: 8 }}>
+                              <div style={{
+                                padding: '10px 14px',
+                                border: `2px solid ${cfg.color}`, borderRadius: '10px 10px 0 0',
+                                background: `${cfg.color}12`, display: 'flex', alignItems: 'center', gap: 10,
+                              }}>
+                                <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>{cfg.emoji}</span>
+                                <span style={{ flex: 1, textAlign: 'right', fontWeight: 700, fontSize: '0.95rem', color: cfg.color }}>
+                                  {cfg.label}
+                                </span>
+                                <span style={{
+                                  fontSize: '0.72rem', fontWeight: 700, color: '#fff',
+                                  background: cfg.color, borderRadius: 20, padding: '2px 8px', flexShrink: 0,
+                                }}>נבחר ✓</span>
+                              </div>
+                              <div style={{
+                                border: `2px solid ${cfg.color}`, borderTop: 'none',
+                                borderRadius: '0 0 10px 10px', background: '#fff', overflow: 'hidden',
                               }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '5px 12px', background: `${cfg.color}10`, fontSize: '0.72rem', fontWeight: 700, color: cfg.color }}>
                                   <div>תכנון</div><div>ביצוע</div>
                                 </div>
                                 {optItems.map((item, idx) => {
                                   const isCompleted = item.status === 'done' || item.status === 'replaced';
-                                  const isMissed = item.status === 'missed';
                                   return (
                                     <div key={item.completion_id || idx} style={{
                                       display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
-                                      padding: '9px 12px',
-                                      borderTop: '1px solid var(--gray-100)',
-                                      opacity: isMissed ? 0.5 : 1,
-                                      alignItems: 'center',
+                                      padding: '9px 12px', borderTop: '1px solid var(--gray-100)', alignItems: 'center',
                                     }}>
                                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
                                         <span style={{ fontSize: '1.25rem', lineHeight: 1, flexShrink: 0 }}>{foodEmoji(item.item_name)}</span>
@@ -338,7 +429,37 @@ export default function TaskView() {
                                   );
                                 })}
                               </div>
-                            )}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={optKey} style={{ marginBottom: 6 }}>
+                            <div style={{
+                              padding: '9px 14px', border: '1.5px solid var(--gray-200)',
+                              borderRadius: 10, background: 'var(--gray-100)',
+                              display: 'flex', alignItems: 'center', gap: 10, opacity: 0.65,
+                            }}>
+                              <span style={{ fontSize: '1.4rem', lineHeight: 1, flexShrink: 0, filter: 'grayscale(1)' }}>{cfg.emoji}</span>
+                              <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-600)' }}>
+                                {cfg.label}
+                              </span>
+                              {canChange ? (
+                                <button
+                                  onClick={() => setPendingConfirm({ slotKey, optKey, planId, groups })}
+                                  style={{
+                                    fontSize: '0.72rem', fontWeight: 700, color: cfg.color,
+                                    background: 'transparent', border: `1.5px solid ${cfg.color}`,
+                                    borderRadius: 16, padding: '3px 8px', cursor: 'pointer',
+                                    opacity: 1, flexShrink: 0,
+                                  }}
+                                >
+                                  שנה
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)', fontWeight: 600, flexShrink: 0 }}>לא נבחר</span>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
