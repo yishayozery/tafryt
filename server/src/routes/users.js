@@ -19,7 +19,7 @@ router.get('/monitored', requireAuth, async (req, res) => {
     const { rows: pending } = await db.query(
       `SELECT NULL AS id, monitored_display_name AS display_name,
               NULL AS username, monitored_phone AS phone,
-              'pending_invite' AS status, created_at
+              'pending_invite' AS status, created_at, token AS invite_token
        FROM invite_tokens
        WHERE supervisor_id = $1 AND used_at IS NULL
        ORDER BY created_at DESC`,

@@ -69,11 +69,39 @@ router.post('/invite', requireAuth, async (req, res) => {
   if (!monitored_phone || !monitored_display_name) {
     return res.status(400).json({ error: 'טלפון ושם המבוקר הם שדות חובה' });
   }
+
+  // וידוא נייד ישראלי
+  const digits = monitored_phone.replace(/\D/g, '');
+  if (!/^05\d{8}$/.test(digits)) {
+    return res.status(400).json({ error: 'מספר נייד לא תקין (חייב להתחיל ב-05, 10 ספרות)' });
+  }
+
   try {
+    // בדיקת כפילות — משתמש קיים עם אותו נייד
+    const existingUser = await db.query(
+      `SELECT id FROM users WHERE REGEXP_REPLACE(phone, '\\D', '', 'g') = $1`,
+      [digits]
+    );
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ error: 'מספר הנייד כבר רשום במערכת' });
+    }
+
+    // בדיקת כפילות — הזמנה פתוחה עם אותו נייד
+    const existingInvite = await db.query(
+      `SELECT id FROM invite_tokens
+       WHERE supervisor_id = $1
+         AND REGEXP_REPLACE(monitored_phone, '\\D', '', 'g') = $2
+         AND used_at IS NULL`,
+      [req.user.id, digits]
+    );
+    if (existingInvite.rows.length > 0) {
+      return res.status(409).json({ error: 'כבר שלחת הזמנה לנייד זה ועדיין לא הצטרף' });
+    }
+
     const { rows } = await db.query(
       `INSERT INTO invite_tokens (supervisor_id, monitored_phone, monitored_display_name)
        VALUES ($1,$2,$3) RETURNING token`,
-      [req.user.id, monitored_phone, monitored_display_name]
+      [req.user.id, digits, monitored_display_name]
     );
     const link = `${process.env.CLIENT_URL || 'https://tafryt-kappa.vercel.app'}/join/${rows[0].token}`;
     res.json({ link, token: rows[0].token });
