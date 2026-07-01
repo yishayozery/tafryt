@@ -30,7 +30,7 @@ export default function PlanForm() {
     monitored_id: '', name: '', type: 'meal',
     start_date: today(), end_date: '',
     visibility_mode: 'daily', photo_required: false,
-    alert_threshold_minutes: 30, notify_on_completion: false,
+    alert_threshold_minutes: 30, notify_on_completion: false, allow_replacement: true,
     relationship_type: 'family', supervisor_label: 'הורה', monitored_label: 'ילד',
   });
   const [items, setItems] = useState([]);
@@ -49,6 +49,7 @@ export default function PlanForm() {
           start_date: p.start_date?.slice(0, 10), end_date: p.end_date?.slice(0, 10),
           visibility_mode: p.visibility_mode, photo_required: p.photo_required,
           alert_threshold_minutes: p.alert_threshold_minutes, notify_on_completion: p.notify_on_completion,
+          allow_replacement: p.allow_replacement ?? true,
           relationship_type: p.relationship_type || 'family',
           supervisor_label: p.supervisor_label || 'הורה',
           monitored_label: p.monitored_label || 'ילד',
@@ -216,6 +217,15 @@ export default function PlanForm() {
                 <div>
                   <div>קבל התראה על כל ביצוע</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>תקבל Push כשהמשתתף מסמן משימה כבוצעה</div>
+                </div>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 400, marginBottom: 0 }}>
+                <input type="checkbox" checked={plan.allow_replacement}
+                  onChange={e => setPlan(p => ({ ...p, allow_replacement: e.target.checked }))}
+                  style={{ width: 18, height: 18 }} />
+                <div>
+                  <div>אפשר החלפה בדיווח</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>המשתתף יכול לדווח שאכל משהו אחר במקום הפריט המתוכנן</div>
                 </div>
               </label>
             </div>

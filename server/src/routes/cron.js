@@ -130,4 +130,15 @@ router.post('/reminders', verifyCronSecret, async (req, res) => {
   }
 });
 
+// POST /api/cron/migrate — מיגרציה חד-פעמית להוספת עמודות חסרות
+router.post('/migrate', verifyCronSecret, async (req, res) => {
+  try {
+    await db.query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS allow_replacement BOOLEAN NOT NULL DEFAULT true`);
+    res.json({ ok: true, message: 'migration done' });
+  } catch (err) {
+    console.error('migrate error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

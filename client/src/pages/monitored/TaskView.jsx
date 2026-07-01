@@ -293,9 +293,11 @@ export default function TaskView() {
                       onClick={() => submitDone(activeItem)}>
                       ✓ {submitting ? 'שולח...' : 'אכלתי!'}
                     </button>
-                    <button className="btn btn-secondary btn-full" onClick={() => setSheetMode('replace')}>
-                      החלפתי במשהו אחר
-                    </button>
+                    {activeItem.plan.allow_replacement !== false && (
+                      <button className="btn btn-secondary btn-full" onClick={() => setSheetMode('replace')}>
+                        החלפתי במשהו אחר
+                      </button>
+                    )}
                     <button className="btn btn-ghost btn-full" onClick={closeSheet}>ביטול</button>
                   </div>
                 </>
