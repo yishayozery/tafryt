@@ -60,16 +60,23 @@ export default function MonitoredList() {
           </div>
         )}
 
-        {monitored.map(m => (
-          <div key={m.id} className="card" style={{ marginBottom: 12 }}>
+        {monitored.map((m, i) => (
+          <div key={m.id || i} className="card" style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontWeight: 700 }}>{m.display_name}</div>
                 {m.phone && <div style={{ color: 'var(--gray-600)', fontSize: '0.85rem' }}>{m.phone}</div>}
+                {m.status === 'pending_invite' && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--warning)', marginTop: 2 }}>
+                    ⏳ ממתין להצטרפות
+                  </div>
+                )}
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => createReset(m.id)}>
-                שחזור סיסמה
-              </button>
+              {m.status !== 'pending_invite' && (
+                <button className="btn btn-ghost btn-sm" onClick={() => createReset(m.id)}>
+                  שחזור סיסמה
+                </button>
+              )}
             </div>
             {resetLinks[m.id] && (
               <div className="alert alert-info" style={{ marginTop: 12 }}>

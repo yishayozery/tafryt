@@ -4,10 +4,10 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// רשימת מבוקרים של המבקר
+// רשימת מבוקרים של המבקר (כולל הזמנות ממתינות)
 router.get('/monitored', requireAuth, async (req, res) => {
   try {
-    const { rows } = await db.query(
+    const { rows: active } = await db.query(
       `SELECT u.id, u.display_name, u.username, u.phone, sl.status, sl.created_at
        FROM supervision_links sl
        JOIN users u ON u.id = sl.monitored_id
@@ -15,7 +15,18 @@ router.get('/monitored', requireAuth, async (req, res) => {
        ORDER BY u.display_name`,
       [req.user.id]
     );
-    res.json(rows);
+
+    const { rows: pending } = await db.query(
+      `SELECT NULL AS id, monitored_display_name AS display_name,
+              NULL AS username, monitored_phone AS phone,
+              'pending_invite' AS status, created_at
+       FROM invite_tokens
+       WHERE supervisor_id = $1 AND used_at IS NULL
+       ORDER BY created_at DESC`,
+      [req.user.id]
+    );
+
+    res.json([...active, ...pending]);
   } catch (err) {
     res.status(500).json({ error: 'שגיאה פנימית' });
   }
