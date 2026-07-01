@@ -76,11 +76,12 @@ function SmartRedirect() {
   useEffect(() => {
     if (user?.is_admin) { setDest('/admin'); return; }
     Promise.all([
-      api.get('/users/monitored').catch(() => ({ data: [] })),
-      api.get('/plans/my').catch(() => ({ data: [] })),
-    ]).then(([supervisorRes, monitoredRes]) => {
-      const isMonitored = monitoredRes.data.length > 0;
-      if (isMonitored && supervisorRes.data.length === 0) {
+      api.get('/users/monitored').catch(() => ({ data: [] })),   // אנשים שאני מפקח עליהם
+      api.get('/users/supervisors').catch(() => ({ data: [] })),  // מי מפקח עלי
+    ]).then(([supervisingRes, supervisedByRes]) => {
+      const iAmSupervised = supervisedByRes.data.length > 0;
+      const iSupervise = supervisingRes.data.length > 0;
+      if (iAmSupervised && !iSupervise) {
         setDest('/my-tasks');
       } else {
         setDest('/supervisor');
