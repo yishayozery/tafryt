@@ -124,7 +124,7 @@ export default function PlanForm() {
               <label>משתתף</label>
               <select value={plan.monitored_id} onChange={e => setPlan(p => ({ ...p, monitored_id: e.target.value }))} required disabled={isEdit}>
                 <option value="">בחר משתתף</option>
-                {monitored.filter(m => m.id).map(m => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+                {monitored.map(m => <option key={m.id} value={m.id}>{m.display_name}{m.is_pending ? ' ⏳' : ''}</option>)}
               </select>
             </div>
 

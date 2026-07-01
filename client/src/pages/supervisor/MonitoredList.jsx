@@ -111,7 +111,7 @@ export default function MonitoredList() {
         )}
 
         {monitored.map((m, i) => {
-          const isPending = m.status === 'pending_invite';
+          const isPending = !!m.is_pending;
           const pendingLink = isPending ? inviteLinkForPending(m) : null;
           return (
             <div key={m.id || i} className="card" style={{ marginBottom: 12 }}>

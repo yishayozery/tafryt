@@ -64,33 +64,36 @@ router.post('/login', async (req, res) => {
 });
 
 // יצירת קישור הזמנה למבוקר (ע"י מבקר)
+// יוצר מיד משתמש ממתין + קשר פיקוח, כך שניתן להקים לוח לפני הצטרפות
 router.post('/invite', requireAuth, async (req, res) => {
   const { monitored_phone, monitored_display_name } = req.body;
   if (!monitored_phone || !monitored_display_name) {
     return res.status(400).json({ error: 'טלפון ושם המבוקר הם שדות חובה' });
   }
 
-  // וידוא נייד ישראלי
   const digits = monitored_phone.replace(/\D/g, '');
   if (!/^05\d{8}$/.test(digits)) {
     return res.status(400).json({ error: 'מספר נייד לא תקין (חייב להתחיל ב-05, 10 ספרות)' });
   }
 
+  const client = await db.pool.connect();
   try {
-    // בדיקת כפילות — משתמש קיים עם אותו נייד
-    const existingUser = await db.query(
-      `SELECT id FROM users WHERE REGEXP_REPLACE(phone, '\\D', '', 'g') = $1`,
+    await client.query('BEGIN');
+
+    // בדיקת כפילות — משתמש פעיל עם אותו נייד
+    const existingUser = await client.query(
+      `SELECT id, is_pending FROM users WHERE REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $1`,
       [digits]
     );
-    if (existingUser.rows.length > 0) {
+    if (existingUser.rows.length > 0 && !existingUser.rows[0].is_pending) {
       return res.status(409).json({ error: 'מספר הנייד כבר רשום במערכת' });
     }
 
-    // בדיקת כפילות — הזמנה פתוחה עם אותו נייד
-    const existingInvite = await db.query(
+    // בדיקת כפילות — הזמנה פתוחה כבר לנייד זה
+    const existingInvite = await client.query(
       `SELECT id FROM invite_tokens
        WHERE supervisor_id = $1
-         AND REGEXP_REPLACE(monitored_phone, '\\D', '', 'g') = $2
+         AND REGEXP_REPLACE(monitored_phone, '[^0-9]', '', 'g') = $2
          AND used_at IS NULL`,
       [req.user.id, digits]
     );
@@ -98,16 +101,41 @@ router.post('/invite', requireAuth, async (req, res) => {
       return res.status(409).json({ error: 'כבר שלחת הזמנה לנייד זה ועדיין לא הצטרף' });
     }
 
-    const { rows } = await db.query(
-      `INSERT INTO invite_tokens (supervisor_id, monitored_phone, monitored_display_name)
-       VALUES ($1,$2,$3) RETURNING token`,
-      [req.user.id, digits, monitored_display_name]
+    // צור משתמש ממתין
+    const tempUsername = `pending_${digits}`;
+    const { rows: newUsers } = await client.query(
+      `INSERT INTO users (display_name, username, password_hash, phone, is_pending)
+       VALUES ($1,$2,'',$3,true)
+       ON CONFLICT (username) DO UPDATE SET display_name=$1, phone=$3, is_pending=true
+       RETURNING id`,
+      [monitored_display_name, tempUsername, digits]
     );
+    const pendingUserId = newUsers[0].id;
+
+    // צור קשר פיקוח
+    await client.query(
+      `INSERT INTO supervision_links (supervisor_id, monitored_id)
+       VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [req.user.id, pendingUserId]
+    );
+
+    // צור invite_token
+    const { rows } = await client.query(
+      `INSERT INTO invite_tokens (supervisor_id, monitored_phone, monitored_display_name, monitored_user_id)
+       VALUES ($1,$2,$3,$4) RETURNING token`,
+      [req.user.id, digits, monitored_display_name, pendingUserId]
+    );
+
+    await client.query('COMMIT');
+
     const link = `${process.env.CLIENT_URL || 'https://tafryt-kappa.vercel.app'}/join/${rows[0].token}`;
     res.json({ link, token: rows[0].token });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'שגיאה פנימית' });
+  } finally {
+    client.release();
   }
 });
 
@@ -131,27 +159,44 @@ router.post('/join/:token', async (req, res) => {
     }
     const invite = invites[0];
 
-    const exists = await db.query('SELECT id FROM users WHERE username = $1', [username]);
+    // בדיקת שם משתמש — לא תפוס ע"י אחר
+    const exists = await db.query(
+      'SELECT id FROM users WHERE username = $1 AND id != $2',
+      [username, invite.monitored_user_id || '00000000-0000-0000-0000-000000000000']
+    );
     if (exists.rows.length > 0) {
       return res.status(409).json({ error: 'שם המשתמש כבר תפוס' });
     }
 
     const password_hash = await bcrypt.hash(password, 12);
-    const { rows: newUsers } = await db.query(
-      `INSERT INTO users (display_name, username, password_hash, phone)
-       VALUES ($1,$2,$3,$4) RETURNING id, display_name, username`,
-      [invite.monitored_display_name, username, password_hash, invite.monitored_phone]
-    );
-    const newUser = newUsers[0];
 
-    await db.query(
-      'INSERT INTO supervision_links (supervisor_id, monitored_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
-      [invite.supervisor_id, newUser.id]
-    );
+    let user;
+    if (invite.monitored_user_id) {
+      // עדכן משתמש ממתין קיים
+      const { rows } = await db.query(
+        `UPDATE users SET username=$1, password_hash=$2, is_pending=false
+         WHERE id=$3 RETURNING id, display_name, username`,
+        [username, password_hash, invite.monitored_user_id]
+      );
+      user = rows[0];
+      // supervision_link כבר קיים
+    } else {
+      // fallback: צור משתמש חדש (הזמנות ישנות ללא monitored_user_id)
+      const { rows } = await db.query(
+        `INSERT INTO users (display_name, username, password_hash, phone)
+         VALUES ($1,$2,$3,$4) RETURNING id, display_name, username`,
+        [invite.monitored_display_name, username, password_hash, invite.monitored_phone]
+      );
+      user = rows[0];
+      await db.query(
+        'INSERT INTO supervision_links (supervisor_id, monitored_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+        [invite.supervisor_id, user.id]
+      );
+    }
 
     await db.query('UPDATE invite_tokens SET used_at = NOW() WHERE id = $1', [invite.id]);
 
-    res.status(201).json({ token: signToken(newUser), user: newUser });
+    res.status(201).json({ token: signToken(user), user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה פנימית' });
