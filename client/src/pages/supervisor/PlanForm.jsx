@@ -17,7 +17,7 @@ const RELATIONSHIPS = [
 const VISIBILITY = [
   { value: 'daily', label: 'יומי — רואה את כל משימות היום' },
   { value: 'weekly', label: 'שבוע קדימה — רואה שבוע שלם' },
-  { value: 'on_time', label: 'שעתי-משימתי — רואה רק משימה שהגיע זמנה' },
+  { value: 'on_time', label: 'שעתי-משימתי — רואה רק המשימה הקרובה, מקבל התראה כשמגיע הזמן' },
 ];
 
 export default function PlanForm() {
@@ -190,9 +190,13 @@ export default function PlanForm() {
             </div>
 
             <div className="form-group">
-              <label>זמן המתנה לפני התראת פספוס (דקות)</label>
-              <input type="number" min="1" max="1440" value={plan.alert_threshold_minutes}
-                onChange={e => setPlan(p => ({ ...p, alert_threshold_minutes: parseInt(e.target.value) }))} />
+              <label>התראת אי-ביצוע — כמה דקות אחרי השעה הנקבעת</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="number" min="1" max="1440" value={plan.alert_threshold_minutes}
+                  onChange={e => setPlan(p => ({ ...p, alert_threshold_minutes: parseInt(e.target.value) }))}
+                  style={{ width: 80 }} />
+                <span style={{ color: 'var(--gray-600)', fontSize: '0.85rem' }}>דקות (אם לא דווח — תשלח אליך התראה)</span>
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -200,13 +204,19 @@ export default function PlanForm() {
                 <input type="checkbox" checked={plan.photo_required}
                   onChange={e => setPlan(p => ({ ...p, photo_required: e.target.checked }))}
                   style={{ width: 18, height: 18 }} />
-                <span>חובת צילום בסימון ביצוע</span>
+                <div>
+                  <div>חובת צילום בסימון ביצוע</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>המשתתף חייב לצלם לפני שמסמן "בוצע"</div>
+                </div>
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 400, marginBottom: 0 }}>
                 <input type="checkbox" checked={plan.notify_on_completion}
                   onChange={e => setPlan(p => ({ ...p, notify_on_completion: e.target.checked }))}
                   style={{ width: 18, height: 18 }} />
-                <span>התראה בזמן אמת על כל ביצוע</span>
+                <div>
+                  <div>קבל התראה על כל ביצוע</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>תקבל Push כשהמשתתף מסמן משימה כבוצעה</div>
+                </div>
               </label>
             </div>
           </div>
