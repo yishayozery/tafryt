@@ -200,34 +200,25 @@ export default function PlanForm() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 400, marginBottom: 0 }}>
-                <input type="checkbox" checked={plan.photo_required}
-                  onChange={e => setPlan(p => ({ ...p, photo_required: e.target.checked }))}
-                  style={{ width: 18, height: 18 }} />
-                <div>
-                  <div>חובת צילום בסימון ביצוע</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>המשתתף חייב לצלם לפני שמסמן "בוצע"</div>
-                </div>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 400, marginBottom: 0 }}>
-                <input type="checkbox" checked={plan.notify_on_completion}
-                  onChange={e => setPlan(p => ({ ...p, notify_on_completion: e.target.checked }))}
-                  style={{ width: 18, height: 18 }} />
-                <div>
-                  <div>קבל התראה על כל ביצוע</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>תקבל Push כשהמשתתף מסמן משימה כבוצעה</div>
-                </div>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 400, marginBottom: 0 }}>
-                <input type="checkbox" checked={plan.allow_replacement}
-                  onChange={e => setPlan(p => ({ ...p, allow_replacement: e.target.checked }))}
-                  style={{ width: 18, height: 18 }} />
-                <div>
-                  <div>אפשר החלפה בדיווח</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>המשתתף יכול לדווח שאכל משהו אחר במקום הפריט המתוכנן</div>
-                </div>
-              </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <Toggle
+                checked={!!plan.photo_required}
+                onChange={v => setPlan(p => ({ ...p, photo_required: v }))}
+                label="חובת צילום בסימון ביצוע"
+                sub="המשתתף חייב לצלם לפני שמסמן ביצוע"
+              />
+              <Toggle
+                checked={!!plan.notify_on_completion}
+                onChange={v => setPlan(p => ({ ...p, notify_on_completion: v }))}
+                label="קבל התראה על כל ביצוע"
+                sub="תקבל Push כשהמשתתף מסמן משימה כבוצעה"
+              />
+              <Toggle
+                checked={plan.allow_replacement !== false}
+                onChange={v => setPlan(p => ({ ...p, allow_replacement: v }))}
+                label="אפשר החלפה בדיווח"
+                sub="המשתתף יכול לדווח שאכל משהו אחר במקום הפריט"
+              />
             </div>
           </div>
 
@@ -325,6 +316,48 @@ export default function PlanForm() {
         )}
       </div>
     </SupervisorLayout>
+  );
+}
+
+function Toggle({ checked, onChange, label, sub }) {
+  return (
+    <div
+      onClick={() => onChange(!checked)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '10px 0',
+        cursor: 'pointer',
+        borderBottom: '1px solid var(--gray-100)',
+      }}
+    >
+      <div style={{ flex: 1, paddingLeft: 12 }}>
+        <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{label}</div>
+        {sub && <div style={{ fontSize: '0.78rem', color: 'var(--gray-500)', marginTop: 2 }}>{sub}</div>}
+      </div>
+      <div style={{
+        width: 44,
+        height: 26,
+        borderRadius: 13,
+        background: checked ? 'var(--green)' : 'var(--gray-300)',
+        position: 'relative',
+        flexShrink: 0,
+        transition: 'background 0.2s',
+      }}>
+        <div style={{
+          width: 20,
+          height: 20,
+          borderRadius: '50%',
+          background: '#fff',
+          position: 'absolute',
+          top: 3,
+          right: checked ? 3 : 21,
+          transition: 'right 0.2s',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }} />
+      </div>
+    </div>
   );
 }
 
