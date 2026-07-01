@@ -16,6 +16,7 @@ export default function TaskView() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [sheetMode, setSheetMode] = useState('main');
+  const [selectedOptions, setSelectedOptions] = useState({});
   const photoRef = useRef();
 
   const today = new Date().toISOString().slice(0, 10);
@@ -213,13 +214,100 @@ export default function TaskView() {
             </div>
 
             {slots.map(slot => {
+              const slotKey = `${slot.date}__${slot.time}`;
               const dateLabel = slot.date !== today
                 ? new Date(slot.date + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' })
                 : null;
 
+              // זיהוי slot עם אפשרויות (כגון ערב)
+              const isOptionSlot = slot.items.some(i => /^אפ׳\s*\d+/.test(i.quantity || ''));
+
+              if (isOptionSlot) {
+                // קיבוץ לפי אפשרות
+                const groups = {};
+                for (const item of slot.items) {
+                  const match = (item.quantity || '').match(/^(אפ׳\s*\d+)/);
+                  const key = match ? match[1].replace(/\s+/, ' ') : 'other';
+                  if (!groups[key]) groups[key] = [];
+                  groups[key].push(item);
+                }
+                const OPTION_LABELS = {
+                  'אפ׳ 1': 'כמו בתפריט',
+                  'אפ׳ 2': 'כמו צהריים',
+                  'אפ׳ 3': 'פיצה ושוקו',
+                };
+                const selectedOpt = selectedOptions[slotKey];
+
+                return (
+                  <div key={slotKey} style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, paddingRight: 4 }}>
+                      <span style={{ fontWeight: 700, color: 'var(--green)', fontSize: '0.95rem' }}>{slot.time}</span>
+                      {dateLabel && <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>{dateLabel}</span>}
+                      <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--gray-800)' }}>ערב — בחר אפשרות:</span>
+                    </div>
+
+                    {Object.entries(groups).map(([optKey, optItems]) => {
+                      const isOpen = selectedOpt === optKey;
+                      const label = OPTION_LABELS[optKey] || optKey;
+                      const anyDone = optItems.some(i => i.status === 'done' || i.status === 'replaced');
+
+                      return (
+                        <div key={optKey} style={{
+                          marginBottom: 8,
+                          border: `1.5px solid ${isOpen ? 'var(--green)' : anyDone ? '#28a745' : 'var(--gray-200)'}`,
+                          borderRadius: 10,
+                          overflow: 'hidden',
+                          background: '#fff',
+                        }}>
+                          <button
+                            onClick={() => setSelectedOptions(prev => ({ ...prev, [slotKey]: isOpen ? null : optKey }))}
+                            style={{ width: '100%', padding: '11px 14px', background: isOpen ? 'var(--green-light)' : anyDone ? '#d4edda' : '#fff', textAlign: 'right', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700, fontSize: '0.9rem', color: isOpen ? 'var(--green)' : anyDone ? '#155724' : 'var(--gray-800)', border: 'none', cursor: 'pointer' }}
+                          >
+                            <span>{label}</span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>{isOpen ? '▲' : '▼'}</span>
+                          </button>
+
+                          {isOpen && (
+                            <div style={{ borderTop: `1px solid ${isOpen ? 'var(--green)' : 'var(--gray-200)'}` }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '4px 12px', background: 'var(--gray-100)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-600)' }}>
+                                <div>תכנון</div><div>ביצוע</div>
+                              </div>
+                              {optItems.map((item, idx) => {
+                                const isCompleted = item.status === 'done' || item.status === 'replaced';
+                                const isMissed = item.status === 'missed';
+                                return (
+                                  <div key={item.completion_id || idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '8px 12px', borderTop: '1px solid var(--gray-100)', opacity: isMissed ? 0.55 : 1, alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                                      <span style={{ fontSize: '1.2rem', lineHeight: 1, flexShrink: 0 }}>{foodEmoji(item.item_name)}</span>
+                                      <div style={{ fontWeight: 600, fontSize: '0.85rem', lineHeight: 1.3 }}>{item.item_name}</div>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                      {isCompleted ? (
+                                        <>
+                                          <StatusBadge status={item.status} />
+                                          {item.status === 'replaced' && item.replaced_with && (
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--orange)' }}>במקום: {item.replaced_with}</div>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <button className="btn btn-primary btn-sm" onClick={() => openSheet(item)} style={{ fontSize: '0.8rem', padding: '4px 12px' }}>דווח</button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              // רנדור רגיל — לא slot של אפשרויות
               return (
-                <div key={`${slot.date}__${slot.time}`} style={{ marginBottom: 16 }}>
-                  {/* Time slot header */}
+                <div key={slotKey} style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, paddingRight: 4 }}>
                     <span style={{ fontWeight: 700, color: 'var(--green)', fontSize: '0.95rem' }}>{slot.time}</span>
                     {dateLabel && <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>{dateLabel}</span>}
@@ -242,7 +330,6 @@ export default function TaskView() {
                         opacity: isMissed ? 0.55 : 1,
                         alignItems: 'center',
                       }}>
-                        {/* תכנון */}
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                           <span style={{ fontSize: '1.4rem', lineHeight: 1, flexShrink: 0, marginTop: 1 }}>
                             {foodEmoji(item.item_name)}
@@ -258,7 +345,6 @@ export default function TaskView() {
                           </div>
                         </div>
 
-                        {/* ביצוע */}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
                           {isCompleted ? (
                             <>
