@@ -9,6 +9,7 @@ export default function Login() {
   const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -22,7 +23,9 @@ export default function Login() {
       else navigate('/supervisor', { replace: true });
     } catch (err) {
       const d = err.response?.data;
-      setError(typeof d?.error === 'string' ? d.error : d?.message || 'שגיאה בכניסה');
+      const msg = typeof d?.error === 'string' ? d.error : d?.message || d?.error?.message || 'שגיאה בכניסה';
+      const status = err.response?.status;
+      setError(status ? `${msg} (${status})` : msg);
     } finally {
       setLoading(false);
     }
@@ -53,14 +56,29 @@ export default function Login() {
           </div>
           <div className="form-group">
             <label>סיסמה</label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-              placeholder="הכנס סיסמה"
-              autoComplete="current-password"
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={form.password}
+                onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                placeholder="הכנס סיסמה"
+                autoComplete="current-password"
+                required
+                style={{ paddingLeft: 40, width: '100%', boxSizing: 'border-box' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                style={{
+                  position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '1.1rem', color: 'var(--gray-500)', padding: 0,
+                }}
+                tabIndex={-1}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
           <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
             {loading ? 'נכנס...' : 'כניסה'}
