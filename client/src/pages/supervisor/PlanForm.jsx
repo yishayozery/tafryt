@@ -38,6 +38,8 @@ export default function PlanForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [duplicateDay, setDuplicateDay] = useState(0);
+  const [editItem, setEditItem] = useState(null); // { id, scheduled_time, item_name, quantity }
+  const [applyDialog, setApplyDialog] = useState(null); // { fromDate, toDate }
 
   useEffect(() => {
     api.get('/users/monitored').then(r => setMonitored(r.data));
@@ -104,6 +106,25 @@ export default function PlanForm() {
   async function duplicateDayToWeek() {
     const { data } = await api.post(`/plans/${id}/items/duplicate-day`, { source_day: duplicateDay });
     api.get(`/plans/${id}/items`).then(r => setItems(r.data));
+  }
+
+  async function confirmSaveEdit() {
+    if (!editItem || !applyDialog) return;
+    try {
+      const { data } = await api.put(`/plans/${id}/items/${editItem.id}`, {
+        scheduled_time: editItem.scheduled_time,
+        item_name: editItem.item_name,
+        quantity: editItem.quantity || null,
+        apply_from_date: applyDialog.fromDate || null,
+        apply_to_date: applyDialog.toDate || null,
+      });
+      setItems(prev => prev.map(i => i.id === editItem.id ? data : i));
+      setEditItem(null);
+      setApplyDialog(null);
+    } catch (err) {
+      setError(err.response?.data?.error || 'שגיאה בשמירה');
+      setApplyDialog(null);
+    }
   }
 
   return (
@@ -300,21 +321,79 @@ export default function PlanForm() {
               <div key={dayKey} className="time-group">
                 <div className="time-group-header">{dayKey}</div>
                 {dayItems.map(item => (
-                  <div key={item.id} className="plan-row">
-                    <span className="plan-row-time">{formatTime(item.scheduled_time)}</span>
-                    <div className="plan-row-info">
-                      <div className="plan-row-name">{item.item_name}</div>
-                      {item.quantity && <div className="plan-row-qty">{item.quantity}</div>}
+                  editItem?.id === item.id ? (
+                    <div key={item.id} style={{ padding: '10px 12px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 8, marginBottom: 8 }}>
+                        <input type="time" value={editItem.scheduled_time}
+                          onChange={e => setEditItem(p => ({ ...p, scheduled_time: e.target.value }))}
+                          style={{ fontSize: '0.9rem' }} />
+                        <input value={editItem.item_name}
+                          onChange={e => setEditItem(p => ({ ...p, item_name: e.target.value }))}
+                          placeholder="שם הפריט" style={{ fontSize: '0.9rem' }} />
+                      </div>
+                      <input value={editItem.quantity || ''} placeholder="כמות (רשות)"
+                        onChange={e => setEditItem(p => ({ ...p, quantity: e.target.value }))}
+                        style={{ fontSize: '0.9rem', width: '100%', marginBottom: 8, boxSizing: 'border-box' }} />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button type="button" className="btn btn-primary btn-sm"
+                          onClick={() => setApplyDialog({ fromDate: today(), toDate: '' })}>שמור</button>
+                        <button type="button" className="btn btn-ghost btn-sm"
+                          onClick={() => setEditItem(null)}>ביטול</button>
+                      </div>
                     </div>
-                    <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}
-                      onClick={() => deleteItem(item.id)}>מחק</button>
-                  </div>
+                  ) : (
+                    <div key={item.id} className="plan-row">
+                      <span className="plan-row-time">{formatTime(item.scheduled_time)}</span>
+                      <div className="plan-row-info">
+                        <div className="plan-row-name">{item.item_name}</div>
+                        {item.quantity && <div className="plan-row-qty">{item.quantity}</div>}
+                      </div>
+                      <button type="button" className="btn btn-ghost btn-sm"
+                        onClick={() => setEditItem({
+                          id: item.id,
+                          scheduled_time: item.scheduled_time?.slice(0, 5) || '',
+                          item_name: item.item_name,
+                          quantity: item.quantity || '',
+                        })}>ערוך</button>
+                      <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}
+                        onClick={() => deleteItem(item.id)}>מחק</button>
+                    </div>
+                  )
                 ))}
               </div>
             ))}
           </>
         )}
       </div>
+
+      {/* דיאלוג: מאיזה תאריך להחיל שינויים */}
+      {applyDialog && (
+        <div className="action-sheet">
+          <div className="action-sheet-bg" onClick={() => setApplyDialog(null)} />
+          <div className="action-sheet-content">
+            <h2 className="action-sheet-title">החל שינויים מתאריך</h2>
+            <p style={{ color: 'var(--gray-600)', fontSize: '0.85rem', marginBottom: 16 }}>
+              ביצועים ממתינים בטווח שתבחר יימחקו ויטענו מחדש עם הנתונים המעודכנים.
+            </p>
+            <div className="form-group">
+              <label>מתאריך</label>
+              <input type="date" value={applyDialog.fromDate}
+                onChange={e => setApplyDialog(p => ({ ...p, fromDate: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>עד תאריך <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(ריק = עד סוף הלוח)</span></label>
+              <input type="date" value={applyDialog.toDate || ''}
+                onChange={e => setApplyDialog(p => ({ ...p, toDate: e.target.value || '' }))} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }}
+                onClick={confirmSaveEdit}>אשר ושמור</button>
+              <button className="btn btn-ghost" style={{ flex: 1 }}
+                onClick={() => setApplyDialog(null)}>ביטול</button>
+            </div>
+          </div>
+        </div>
+      )}
     </SupervisorLayout>
   );
 }

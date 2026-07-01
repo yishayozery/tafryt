@@ -86,7 +86,7 @@ router.post('/duplicate-day', requireAuth, async (req, res) => {
 
 // עדכון שורה
 router.put('/:itemId', requireAuth, async (req, res) => {
-  const { day_of_week, specific_date, scheduled_time, item_name, quantity } = req.body;
+  const { day_of_week, specific_date, scheduled_time, item_name, quantity, apply_from_date, apply_to_date } = req.body;
   try {
     const plan = await getPlanWithAccess(req.params.planId, req.user.id, 'supervisor');
     if (!plan) return res.status(403).json({ error: 'אין הרשאה' });
@@ -111,6 +111,22 @@ router.put('/:itemId', requireAuth, async (req, res) => {
         req.params.itemId,
       ]
     );
+
+    // מחיקת completions ממתינים בטווח התאריכים שנבחר
+    if (apply_from_date) {
+      if (apply_to_date) {
+        await db.query(
+          "DELETE FROM completions WHERE plan_item_id=$1 AND date BETWEEN $2 AND $3 AND status IN ('pending', 'missed')",
+          [req.params.itemId, apply_from_date, apply_to_date]
+        );
+      } else {
+        await db.query(
+          "DELETE FROM completions WHERE plan_item_id=$1 AND date >= $2 AND status IN ('pending', 'missed')",
+          [req.params.itemId, apply_from_date]
+        );
+      }
+    }
+
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'שגיאה פנימית' });
