@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import api from '../../api/client';
 import { SupervisorLayout, dayName, formatTime } from '../../components/Layout';
 
@@ -134,6 +135,92 @@ export default function PlanForm() {
   async function duplicateDayToWeek() {
     const { data } = await api.post(`/plans/${id}/items/duplicate-day`, { source_day: duplicateDay });
     api.get(`/plans/${id}/items`).then(r => setItems(r.data));
+  }
+
+  function downloadExcelTemplate() {
+    const rows = [
+      ['שעה', 'פריט', 'כמות'],
+      ...SAMPLE_MEALS.flatMap(m =>
+        m.items.map(i => [m.time, i.item_name, i.quantity ?? ''])
+      ),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 8 }, { wch: 32 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'תפריט');
+    XLSX.writeFile(wb, 'תבנית_תפריט.xlsx');
+  }
+
+  function handleExcelUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        // מצא שורת כותרות (שעה / פריט / כמות)
+        let headerIdx = 0;
+        for (let i = 0; i < Math.min(rows.length, 5); i++) {
+          const r = rows[i].map(c => String(c).trim());
+          if (r.some(c => c.includes('שעה') || c.toLowerCase().includes('time'))) {
+            headerIdx = i; break;
+          }
+        }
+        const headers = rows[headerIdx].map(c => String(c).trim().toLowerCase());
+        const timeCol  = headers.findIndex(h => h.includes('שעה') || h === 'time');
+        const itemCol  = headers.findIndex(h => h.includes('פריט') || h.includes('item'));
+        const qtyCol   = headers.findIndex(h => h.includes('כמות') || h.includes('qty') || h.includes('quantity'));
+
+        if (timeCol === -1 || itemCol === -1) {
+          setError('פורמט קובץ לא תקין — נדרשות עמודות "שעה" ו"פריט"');
+          return;
+        }
+
+        // קבץ לפי שעה
+        const mealMap = new Map();
+        for (let i = headerIdx + 1; i < rows.length; i++) {
+          const row = rows[i];
+          const timeRaw = String(row[timeCol] ?? '').trim();
+          const itemName = String(row[itemCol] ?? '').trim();
+          if (!timeRaw || !itemName) continue;
+
+          // נרמל שעה
+          let time = timeRaw;
+          if (/^\d{1,2}:\d{2}$/.test(timeRaw)) {
+            time = timeRaw.padStart(5, '0');
+          } else if (/^\d{1,2}$/.test(timeRaw)) {
+            time = timeRaw.padStart(2, '0') + ':00';
+          } else if (typeof row[timeCol] === 'number') {
+            // Excel serial time
+            const totalMin = Math.round(row[timeCol] * 24 * 60);
+            time = String(Math.floor(totalMin / 60)).padStart(2, '0') + ':' + String(totalMin % 60).padStart(2, '0');
+          }
+
+          const qty = qtyCol >= 0 ? String(row[qtyCol] ?? '').trim() || null : null;
+          if (!mealMap.has(time)) mealMap.set(time, []);
+          mealMap.get(time).push({ item_name: itemName, quantity: qty });
+        }
+
+        if (mealMap.size === 0) {
+          setError('לא נמצאו שורות תקינות בקובץ');
+          return;
+        }
+
+        const meals = [...mealMap.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([time, items]) => ({ time, items }));
+
+        const checked = new Set();
+        meals.forEach((m, mi) => m.items.forEach((_, ii) => checked.add(`${mi}-${ii}`)));
+        setOcrDialog({ meals, selectedDays: [0,1,2,3,4,5,6], checked });
+      } catch {
+        setError('שגיאה בקריאת הקובץ — ודא שזהו קובץ xlsx תקין');
+      }
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   function loadSampleOcr() {
@@ -341,7 +428,20 @@ export default function PlanForm() {
             <hr className="divider" />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h2 style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 0 }}>שורות תפריט</h2>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-ghost btn-sm"
+                onClick={downloadExcelTemplate} title="הורד תבנית אקסל">
+                ⬇️ תבנית
+              </button>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                background: 'var(--gray-100)', color: 'var(--gray-700)', borderRadius: 8,
+                padding: '7px 14px', fontSize: '0.85rem', fontWeight: 600, border: '1px solid var(--gray-300)',
+              }}>
+                📊 אקסל
+                <input type="file" accept=".xlsx,.xls,.csv"
+                  style={{ display: 'none' }} onChange={handleExcelUpload} />
+              </label>
               <button type="button" className="btn btn-ghost btn-sm"
                 onClick={loadSampleOcr} title="פתח תפריט לדוגמא">
                 📋 דוגמא
@@ -351,7 +451,7 @@ export default function PlanForm() {
                 background: 'var(--green)', color: '#fff', borderRadius: 8,
                 padding: '7px 14px', fontSize: '0.85rem', fontWeight: 600,
               }}>
-                📷 יבוא מתמונה
+                📷 תמונה
                 <input type="file" accept="image/*" capture="environment"
                   style={{ display: 'none' }} onChange={handleOcrUpload} />
               </label>
