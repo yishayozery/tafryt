@@ -149,6 +149,11 @@ export default function TaskView() {
     setError('');
   }
 
+  function canEditCompletion(item) {
+    if (!item.completed_at) return false;
+    return (Date.now() - new Date(item.completed_at)) / 60000 <= 60;
+  }
+
   async function confirmOption() {
     if (!pendingConfirm || optionLoading) return;
     const { slotKey, optKey, planId, groups } = pendingConfirm;
@@ -414,6 +419,12 @@ export default function TaskView() {
                                         {isCompleted ? (
                                           <>
                                             <StatusBadge status={item.status} />
+                                            {canEditCompletion(item) && (
+                                              <button className="btn btn-ghost btn-sm" onClick={() => openSheet(item)}
+                                                style={{ fontSize: '0.72rem', padding: '2px 8px', color: 'var(--gray-600)' }}>
+                                                ✏️ ערוך
+                                              </button>
+                                            )}
                                             {item.status === 'replaced' && item.replaced_with && (
                                               <div style={{ fontSize: '0.72rem', color: 'var(--orange)' }}>במקום: {item.replaced_with}</div>
                                             )}
@@ -512,6 +523,12 @@ export default function TaskView() {
                           {isCompleted ? (
                             <>
                               <StatusBadge status={item.status} />
+                              {canEditCompletion(item) && (
+                                <button className="btn btn-ghost btn-sm" onClick={() => openSheet(item)}
+                                  style={{ fontSize: '0.72rem', padding: '2px 8px', color: 'var(--gray-600)' }}>
+                                  ✏️ ערוך
+                                </button>
+                              )}
                               {item.status === 'replaced' && item.replaced_with && (
                                 <div style={{ fontSize: '0.75rem', color: 'var(--orange)' }}>
                                   במקום: {item.replaced_with}

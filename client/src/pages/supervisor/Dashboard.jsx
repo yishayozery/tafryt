@@ -9,10 +9,21 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pushMsg, setPushMsg] = useState('');
 
   useEffect(() => {
     api.get('/plans').then(r => { setPlans(r.data); setLoading(false); });
   }, []);
+
+  async function testPush() {
+    try {
+      await api.post('/cron/test-push');
+      setPushMsg('✓ התראה נשלחה — בדוק את הדפדפן');
+    } catch (err) {
+      setPushMsg('✗ ' + (err.response?.data?.error || 'שגיאה בשליחה'));
+    }
+    setTimeout(() => setPushMsg(''), 4000);
+  }
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -21,10 +32,20 @@ export default function Dashboard() {
       <div className="page">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h1 className="page-title" style={{ marginBottom: 0 }}>שלום, {user?.display_name} 👋</h1>
-          <button className="btn btn-primary btn-sm" onClick={() => navigate('/supervisor/plans/new')}>
-            + לוח חדש
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={testPush} title="בדוק שהתראות עובדות">
+              🔔
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => navigate('/supervisor/plans/new')}>
+              + לוח חדש
+            </button>
+          </div>
         </div>
+        {pushMsg && (
+          <div className={`alert ${pushMsg.startsWith('✓') ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: 12 }}>
+            {pushMsg}
+          </div>
+        )}
 
         {loading && <div className="spinner" />}
 

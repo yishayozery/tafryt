@@ -17,8 +17,9 @@ function verifyCronSecret(req, res, next) {
 router.post('/missed-items', verifyCronSecret, async (req, res) => {
   try {
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const dayOfWeek = now.getDay();
+    // תאריך לפי שעון ישראל (לא UTC) — חשוב בין 22:00-00:00
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+    const dayOfWeek = new Date(todayStr + 'T12:00:00').getDay();
 
     const { rows: items } = await db.query(
       `SELECT
@@ -97,9 +98,10 @@ router.post('/missed-items', verifyCronSecret, async (req, res) => {
 router.post('/reminders', verifyCronSecret, async (req, res) => {
   try {
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const dayOfWeek = now.getDay();
-    const currentMinute = now.toTimeString().slice(0, 5);
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+    const dayOfWeek = new Date(todayStr + 'T12:00:00').getDay();
+    // שעה נוכחית לפי שעון ישראל
+    const currentMinute = now.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hour12: false });
 
     const { rows: items } = await db.query(
       `SELECT pi.item_name, p.name AS plan_name, um.push_subscription
@@ -126,6 +128,43 @@ router.post('/reminders', verifyCronSecret, async (req, res) => {
     res.json({ ok: true, sent: items.length });
   } catch (err) {
     console.error('cron/reminders error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/cron/status — מצב ה-cron (בלי secret, למבקר)
+router.get('/status', async (req, res) => {
+  try {
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+    const { rows } = await db.query(
+      `SELECT COUNT(*) FILTER (WHERE c.status = 'missed') AS missed_today,
+              COUNT(*) FILTER (WHERE c.status IN ('done','replaced')) AS done_today,
+              COUNT(*) FILTER (WHERE c.status = 'pending' OR c.status IS NULL) AS pending_today
+       FROM completions c
+       JOIN plan_items pi ON pi.id = c.plan_item_id
+       WHERE c.date = $1`,
+      [todayStr]
+    );
+    res.json({ ok: true, today: todayStr, ...rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/cron/test-push — שלח push test למבקר (דורש auth)
+const { requireAuth } = require('../middleware/auth');
+const { sendPush } = require('../services/push');
+router.post('/test-push', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await db.query('SELECT push_subscription, display_name FROM users WHERE id=$1', [req.user.id]);
+    const u = rows[0];
+    if (!u?.push_subscription) return res.status(400).json({ error: 'אין push subscription — אפשר התראות בדפדפן' });
+    await sendPush(u.push_subscription, {
+      title: 'בדיקת התראות ✓',
+      body: 'התראות עובדות תקין!',
+    });
+    res.json({ ok: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

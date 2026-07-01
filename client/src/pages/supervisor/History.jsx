@@ -21,7 +21,8 @@ export default function History() {
       .then(r => { setItems(r.data); setLoading(false); });
   }, [id, from, to]);
 
-  const grouped = groupByDate(items);
+  const visibleItems = items.filter(i => i.status !== 'cancelled');
+  const grouped = groupByDate(visibleItems);
 
   return (
     <SupervisorLayout title="היסטוריה" back={`/supervisor/plans/${id}`}>
@@ -46,25 +47,58 @@ export default function History() {
         {grouped.map(([date, dayItems]) => (
           <div key={date} className="time-group">
             <div className="time-group-header">{formatDateHe(date)}</div>
-            {dayItems.map((item, i) => (
-              <div key={i} className="plan-row">
-                <span className="plan-row-time">{item.scheduled_time?.slice(0, 5)}</span>
-                <div className="plan-row-info">
-                  <div className="plan-row-name">{item.item_name}</div>
-                  {item.quantity && <div className="plan-row-qty">{item.quantity}</div>}
+            {dayItems.map((item, i) => {
+              const isCompleted = item.status === 'done' || item.status === 'replaced';
+              const delta = calcDelta(item);
+              return (
+                <div key={i} style={{
+                  padding: '10px 12px', marginBottom: 4, background: '#fff',
+                  borderRadius: 8, border: '1px solid var(--gray-200)',
+                  opacity: item.status === 'missed' ? 0.6 : 1,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 700, color: 'var(--green)', fontSize: '0.85rem', flexShrink: 0, minWidth: 38 }}>
+                      {item.scheduled_time?.slice(0, 5)}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{item.item_name}</div>
+                      {item.quantity && !/^אפ׳/.test(item.quantity || '') && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--gray-600)' }}>{item.quantity}</div>
+                      )}
+                    </div>
+                    <StatusBadge status={item.status || 'pending'} />
+                  </div>
+                  {isCompleted && item.completed_at && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, paddingRight: 46 }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--gray-600)' }}>
+                        דווח: {formatTime(item.completed_at)}
+                      </span>
+                      {delta !== null && (
+                        <span style={{
+                          fontSize: '0.7rem', fontWeight: 700,
+                          color: delta <= 0 ? '#2d6a4f' : delta <= 20 ? '#e07b39' : '#d62839',
+                          background: delta <= 0 ? '#2d6a4f18' : delta <= 20 ? '#e07b3918' : '#d6283918',
+                          padding: '1px 6px', borderRadius: 10,
+                        }}>
+                          {delta < 0 ? `מוקדם ${Math.abs(delta)}דק׳` : delta === 0 ? 'בדיוק בזמן' : `+${delta}דק׳`}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {item.status === 'replaced' && item.replaced_with && (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--orange)', marginTop: 4 }}>הוחלף ב: {item.replaced_with}</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--orange)', marginTop: 4, paddingRight: 46 }}>
+                      הוחלף ב: {item.replaced_with}
+                    </div>
                   )}
                   {item.photo_url && (
                     <a href={item.photo_url} target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize: '0.8rem', color: 'var(--green)', marginTop: 4, display: 'block' }}>
+                      style={{ fontSize: '0.78rem', color: 'var(--green)', marginTop: 4, display: 'block', paddingRight: 46 }}>
                       📷 צפה בתמונה
                     </a>
                   )}
                 </div>
-                <StatusBadge status={item.status || 'pending'} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         ))}
       </div>
@@ -79,6 +113,16 @@ function weekAgo() {
 }
 function formatDateHe(d) {
   return new Date(d + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+function formatTime(completedAt) {
+  if (!completedAt) return '';
+  return new Date(completedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
+}
+function calcDelta(item) {
+  if (!item.completed_at || !item.scheduled_time || !item.date) return null;
+  const scheduled = new Date(`${item.date.slice(0,10)}T${item.scheduled_time.slice(0,5)}:00`);
+  const actual = new Date(item.completed_at);
+  return Math.round((actual - scheduled) / 60000);
 }
 function groupByDate(items) {
   const g = {};
