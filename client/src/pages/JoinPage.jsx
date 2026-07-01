@@ -36,7 +36,7 @@ export default function JoinPage() {
     try {
       const { data } = await api.post(`/auth/join/${token}`, form);
       login(data.token, data.user);
-      navigate('/');
+      navigate('/my-tasks', { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || 'שגיאה בהרשמה');
     } finally {

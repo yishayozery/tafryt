@@ -61,7 +61,7 @@ export default function App() {
           <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
 
           {/* ברירת מחדל */}
-          <Route path="/" element={<RequireAuth><SmartRedirect /></RequireAuth>} />
+          <Route path="/" element={<SmartRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
@@ -70,25 +70,29 @@ export default function App() {
 }
 
 function SmartRedirect() {
-  const { user } = useAuth();
   const [dest, setDest] = useState(null);
 
   useEffect(() => {
-    if (user?.is_admin) { setDest('/admin'); return; }
+    // קריאה ישירה מ-localStorage כדי לא להסתמך על עדכון context אסינכרוני
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem('user')); } catch {}
+    if (!user) { setDest('/login'); return; }
+    if (user.is_admin) { setDest('/admin'); return; }
+
     Promise.all([
-      api.get('/users/monitored').catch(() => ({ data: [] })),   // אנשים שאני מפקח עליהם
-      api.get('/users/supervisors').catch(() => ({ data: [] })),  // מי מפקח עלי
+      api.get('/users/monitored').catch(() => ({ data: [] })),
+      api.get('/users/supervisors').catch(() => ({ data: [] })),
     ]).then(([supervisingRes, supervisedByRes]) => {
       const iAmSupervised = supervisedByRes.data.length > 0;
       const iSupervise = supervisingRes.data.length > 0;
-      if (iAmSupervised && !iSupervise) {
-        setDest('/my-tasks');
-      } else {
-        setDest('/supervisor');
-      }
+      setDest(iAmSupervised && !iSupervise ? '/my-tasks' : '/supervisor');
     });
   }, []);
 
-  if (!dest) return <div className="spinner" />;
+  if (!dest) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+      <div className="spinner" />
+    </div>
+  );
   return <Navigate to={dest} replace />;
 }
