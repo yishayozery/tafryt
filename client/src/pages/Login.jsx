@@ -21,7 +21,8 @@ export default function Login() {
       else if (data.user.is_monitored) navigate('/my-tasks', { replace: true });
       else navigate('/supervisor', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.error || 'שגיאה בכניסה');
+      const d = err.response?.data;
+      setError(typeof d?.error === 'string' ? d.error : d?.message || 'שגיאה בכניסה');
     } finally {
       setLoading(false);
     }

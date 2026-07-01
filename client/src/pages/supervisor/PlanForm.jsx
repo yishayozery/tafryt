@@ -14,6 +14,32 @@ const RELATIONSHIPS = [
   { value: 'custom',    supervisor_label: '',         monitored_label: '' },
 ];
 
+const SAMPLE_MEALS = [
+  { time: '07:30', items: [
+    { item_name: 'לחמנייה / 2 פרוסות לחם', quantity: null },
+    { item_name: '2 פרוסות גבינה צהובה / טונה', quantity: null },
+    { item_name: 'משקה חם', quantity: 'כוס' },
+  ]},
+  { time: '10:00', items: [
+    { item_name: 'פרי', quantity: '1' },
+    { item_name: 'יוגורט', quantity: null },
+  ]},
+  { time: '13:00', items: [
+    { item_name: 'עוף / בשר', quantity: 'מנה' },
+    { item_name: 'אורז / פסטה', quantity: 'כוס' },
+    { item_name: 'ירקות מבושלים', quantity: null },
+  ]},
+  { time: '16:00', items: [
+    { item_name: 'פרי', quantity: '2' },
+    { item_name: 'חטיף', quantity: null },
+  ]},
+  { time: '19:00', items: [
+    { item_name: 'לחם', quantity: '2 פרוסות' },
+    { item_name: 'גבינה / ביצה', quantity: null },
+    { item_name: 'ירקות טריים', quantity: null },
+  ]},
+];
+
 const VISIBILITY = [
   { value: 'daily', label: 'יומי — רואה את כל משימות היום' },
   { value: 'weekly', label: 'שבוע קדימה — רואה שבוע שלם' },
@@ -108,6 +134,12 @@ export default function PlanForm() {
   async function duplicateDayToWeek() {
     const { data } = await api.post(`/plans/${id}/items/duplicate-day`, { source_day: duplicateDay });
     api.get(`/plans/${id}/items`).then(r => setItems(r.data));
+  }
+
+  function loadSampleOcr() {
+    const checked = new Set();
+    SAMPLE_MEALS.forEach((meal, mi) => meal.items.forEach((_, ii) => checked.add(`${mi}-${ii}`)));
+    setOcrDialog({ meals: SAMPLE_MEALS, selectedDays: [0,1,2,3,4,5,6], checked });
   }
 
   async function handleOcrUpload(e) {
@@ -309,6 +341,11 @@ export default function PlanForm() {
             <hr className="divider" />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h2 style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 0 }}>שורות תפריט</h2>
+              <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn btn-ghost btn-sm"
+                onClick={loadSampleOcr} title="פתח תפריט לדוגמא">
+                📋 דוגמא
+              </button>
               <label style={{
                 display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
                 background: 'var(--green)', color: '#fff', borderRadius: 8,
@@ -318,6 +355,7 @@ export default function PlanForm() {
                 <input type="file" accept="image/*" capture="environment"
                   style={{ display: 'none' }} onChange={handleOcrUpload} />
               </label>
+            </div>
             </div>
 
             {/* הוספת שורה */}
