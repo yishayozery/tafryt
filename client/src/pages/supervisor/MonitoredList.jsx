@@ -52,6 +52,17 @@ export default function MonitoredList() {
     setResetLinks(p => ({ ...p, [monitoredId]: data.link }));
   }
 
+  async function removeMonitored(m) {
+    const name = m.display_name;
+    if (!window.confirm(`למחוק את ${name} מהרשימה?`)) return;
+    if (m.status === 'pending_invite') {
+      await api.delete(`/users/monitored/invite/${m.invite_token}`);
+    } else {
+      await api.delete(`/users/monitored/${m.id}`);
+    }
+    load();
+  }
+
   function inviteLinkForPending(m) {
     return `${BASE_URL}/join/${m.invite_token}`;
   }
@@ -114,11 +125,20 @@ export default function MonitoredList() {
                     </div>
                   )}
                 </div>
-                {!isPending && (
-                  <button className="btn btn-ghost btn-sm" onClick={() => createReset(m.id)}>
-                    שחזור סיסמה
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {!isPending && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => createReset(m.id)}>
+                      שחזור סיסמה
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--danger)' }}
+                    onClick={() => removeMonitored(m)}
+                  >
+                    הסר
                   </button>
-                )}
+                </div>
               </div>
 
               {/* כפתורי שליחה חוזרת להזמנה ממתינה */}

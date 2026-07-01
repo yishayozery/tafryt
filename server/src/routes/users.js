@@ -32,6 +32,33 @@ router.get('/monitored', requireAuth, async (req, res) => {
   }
 });
 
+// הסרת מבוקר (מחיקת קשר פיקוח + ביטול הזמנות פתוחות)
+router.delete('/monitored/:id', requireAuth, async (req, res) => {
+  try {
+    // הסר קשר פיקוח פעיל
+    await db.query(
+      'DELETE FROM supervision_links WHERE supervisor_id=$1 AND monitored_id=$2',
+      [req.user.id, req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'שגיאה פנימית' });
+  }
+});
+
+// ביטול הזמנה ממתינה (לפי טלפון)
+router.delete('/monitored/invite/:token', requireAuth, async (req, res) => {
+  try {
+    await db.query(
+      'DELETE FROM invite_tokens WHERE token=$1 AND supervisor_id=$2 AND used_at IS NULL',
+      [req.params.token, req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'שגיאה פנימית' });
+  }
+});
+
 // רשימת מבקרים שמפקחים על המשתמש הנוכחי
 router.get('/supervisors', requireAuth, async (req, res) => {
   try {
