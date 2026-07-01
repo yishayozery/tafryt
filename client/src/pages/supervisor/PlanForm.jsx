@@ -5,6 +5,15 @@ import { SupervisorLayout, dayName, formatTime } from '../../components/Layout';
 
 const DAYS = [0, 1, 2, 3, 4, 5, 6];
 const DAY_LABELS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
+const RELATIONSHIPS = [
+  { value: 'family',    supervisor_label: 'הורה',    monitored_label: 'ילד' },
+  { value: 'health',    supervisor_label: 'מטפל',    monitored_label: 'מטופל' },
+  { value: 'coach',     supervisor_label: 'מאמן',    monitored_label: 'ספורטאי' },
+  { value: 'education', supervisor_label: 'מורה',    monitored_label: 'תלמיד' },
+  { value: 'custom',    supervisor_label: '',         monitored_label: '' },
+];
+
 const VISIBILITY = [
   { value: 'daily', label: 'יומי — רואה את כל משימות היום' },
   { value: 'weekly', label: 'שבוע קדימה — רואה שבוע שלם' },
@@ -22,6 +31,7 @@ export default function PlanForm() {
     start_date: today(), end_date: '',
     visibility_mode: 'daily', photo_required: false,
     alert_threshold_minutes: 30, notify_on_completion: false,
+    relationship_type: 'family', supervisor_label: 'הורה', monitored_label: 'ילד',
   });
   const [items, setItems] = useState([]);
   const [newItem, setNewItem] = useState({ day_of_week: 0, specific_date: '', scheduled_time: '', item_name: '', quantity: '', mode: 'weekly' });
@@ -39,6 +49,9 @@ export default function PlanForm() {
           start_date: p.start_date?.slice(0, 10), end_date: p.end_date?.slice(0, 10),
           visibility_mode: p.visibility_mode, photo_required: p.photo_required,
           alert_threshold_minutes: p.alert_threshold_minutes, notify_on_completion: p.notify_on_completion,
+          relationship_type: p.relationship_type || 'family',
+          supervisor_label: p.supervisor_label || 'הורה',
+          monitored_label: p.monitored_label || 'ילד',
         });
       });
       api.get(`/plans/${id}/items`).then(r => setItems(r.data));
@@ -108,12 +121,51 @@ export default function PlanForm() {
             </div>
 
             <div className="form-group">
-              <label>מבוקר</label>
+              <label>משתתף</label>
               <select value={plan.monitored_id} onChange={e => setPlan(p => ({ ...p, monitored_id: e.target.value }))} required disabled={isEdit}>
-                <option value="">בחר מבוקר</option>
-                {monitored.map(m => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+                <option value="">בחר משתתף</option>
+                {monitored.filter(m => m.id).map(m => <option key={m.id} value={m.id}>{m.display_name}</option>)}
               </select>
             </div>
+
+            <div className="form-group">
+              <label>סוג קשר</label>
+              <select
+                value={plan.relationship_type}
+                onChange={e => {
+                  const rel = RELATIONSHIPS.find(r => r.value === e.target.value);
+                  setPlan(p => ({
+                    ...p,
+                    relationship_type: rel.value,
+                    supervisor_label: rel.supervisor_label || p.supervisor_label,
+                    monitored_label: rel.monitored_label || p.monitored_label,
+                  }));
+                }}
+              >
+                <option value="family">הורה / ילד</option>
+                <option value="health">מטפל / מטופל</option>
+                <option value="coach">מאמן / ספורטאי</option>
+                <option value="education">מורה / תלמיד</option>
+                <option value="custom">מותאם אישית</option>
+              </select>
+            </div>
+
+            {plan.relationship_type === 'custom' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>תפקיד המנהל</label>
+                  <input value={plan.supervisor_label}
+                    onChange={e => setPlan(p => ({ ...p, supervisor_label: e.target.value }))}
+                    placeholder='לדוגמה: "דיאטנית"' />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>תפקיד המשתתף</label>
+                  <input value={plan.monitored_label}
+                    onChange={e => setPlan(p => ({ ...p, monitored_label: e.target.value }))}
+                    placeholder='לדוגמה: "מטופל"' />
+                </div>
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
