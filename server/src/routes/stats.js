@@ -58,6 +58,22 @@ router.get('/', requireAuth, async (req, res) => {
       else break;
     }
 
+    // עמידה ביעד — בוצע עד 10 דק' אחרי השעה הנקבעת (שבוע)
+    const { rows: [{ on_time }] } = await db.query(
+      `SELECT COUNT(*)::int AS on_time
+       FROM completions c
+       JOIN plan_items pi ON pi.id = c.plan_item_id
+       WHERE pi.plan_id = $1
+         AND c.date BETWEEN $2 AND $3
+         AND c.status IN ('done','replaced')
+         AND c.completed_at IS NOT NULL
+         AND EXTRACT(EPOCH FROM (
+           c.completed_at -
+           (c.date::timestamp + pi.scheduled_time::time) AT TIME ZONE 'Asia/Jerusalem'
+         )) / 60 BETWEEN -120 AND 10`,
+      [req.params.planId, weekAgo, today]
+    );
+
     // ימים לפי ביצוע בשבוע אחרון (לגרף)
     const { rows: dailyRows } = await db.query(
       `SELECT c.date,
@@ -77,11 +93,8 @@ router.get('/', requireAuth, async (req, res) => {
     };
 
     res.json({
-      today: {
-        ...toMap(todayStats),
-        total: total_today,
-      },
-      week: toMap(weekStats),
+      today: { ...toMap(todayStats), total: total_today },
+      week: { ...toMap(weekStats), on_time },
       streak,
       daily: dailyRows,
     });

@@ -10,6 +10,8 @@ export default function History() {
   const [loading, setLoading] = useState(true);
   const [from, setFrom] = useState(weekAgo());
   const [to, setTo] = useState(today());
+  const [statusFilter, setStatusFilter] = useState('all'); // all | open | replaced
+  const [expanded, setExpanded] = useState(null); // completion key
 
   useEffect(() => {
     api.get(`/plans/${id}`).then(r => setPlan(r.data));
@@ -21,7 +23,12 @@ export default function History() {
       .then(r => { setItems(r.data); setLoading(false); });
   }, [id, from, to]);
 
-  const visibleItems = items.filter(i => i.status !== 'cancelled');
+  const allVisible = items.filter(i => i.status !== 'cancelled');
+  const replacedCount = allVisible.filter(i => i.status === 'replaced').length;
+  const openCount     = allVisible.filter(i => !i.status || i.status === 'pending' || i.status === 'missed').length;
+  const visibleItems  = statusFilter === 'replaced' ? allVisible.filter(i => i.status === 'replaced')
+                      : statusFilter === 'open'     ? allVisible.filter(i => !i.status || i.status === 'pending' || i.status === 'missed')
+                      : allVisible;
   const grouped = groupByDate(visibleItems);
 
   return (
@@ -38,10 +45,40 @@ export default function History() {
           </div>
         </div>
 
+        {/* פילטר סטטוס */}
+        {!loading && allVisible.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+            {[
+              { key: 'all',      label: 'הכל',    count: allVisible.length },
+              { key: 'open',     label: 'פתוח',   count: openCount },
+              { key: 'replaced', label: 'החלפות', count: replacedCount },
+            ].map(({ key, label, count }) => (
+              <button key={key} onClick={() => setStatusFilter(key)} style={{
+                padding: '5px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                fontWeight: 600, fontSize: '0.8rem',
+                background: statusFilter === key ? 'var(--green)' : 'var(--gray-100)',
+                color: statusFilter === key ? '#fff' : 'var(--gray-600)',
+              }}>
+                {label}
+                <span style={{
+                  marginRight: 5, fontSize: '0.75rem',
+                  background: statusFilter === key ? 'rgba(255,255,255,0.25)' : 'var(--gray-200)',
+                  borderRadius: 10, padding: '1px 6px',
+                }}>{count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {loading && <div className="spinner" />}
 
-        {!loading && items.length === 0 && (
-          <div className="empty-state"><p>אין נתונים לתקופה זו</p></div>
+        {!loading && visibleItems.length === 0 && (
+          <div className="empty-state">
+            <p>{allVisible.length === 0 ? 'אין נתונים לתקופה זו' : 'אין פריטים בסינון זה'}</p>
+            {statusFilter !== 'all' && (
+              <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setStatusFilter('all')}>הצג הכל</button>
+            )}
+          </div>
         )}
 
         {grouped.map(([date, dayItems]) => (
@@ -49,13 +86,20 @@ export default function History() {
             <div className="time-group-header">{formatDateHe(date)}</div>
             {dayItems.map((item, i) => {
               const isCompleted = item.status === 'done' || item.status === 'replaced';
+              const isReplaced  = item.status === 'replaced';
               const delta = calcDelta(item);
+              const key = `${date}-${i}`;
+              const isExpanded = expanded === key;
+
               return (
-                <div key={i} style={{
-                  padding: '10px 12px', marginBottom: 4, background: '#fff',
-                  borderRadius: 8, border: '1px solid var(--gray-200)',
-                  opacity: item.status === 'missed' ? 0.6 : 1,
-                }}>
+                <div key={i}
+                  onClick={() => isReplaced && setExpanded(isExpanded ? null : key)}
+                  style={{
+                    padding: '10px 12px', marginBottom: 4, background: '#fff',
+                    borderRadius: 8, border: `1px solid ${isExpanded ? 'var(--orange)' : 'var(--gray-200)'}`,
+                    opacity: item.status === 'missed' ? 0.6 : 1,
+                    cursor: isReplaced ? 'pointer' : 'default',
+                  }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontWeight: 700, color: 'var(--green)', fontSize: '0.85rem', flexShrink: 0, minWidth: 38 }}>
                       {item.scheduled_time?.slice(0, 5)}
@@ -67,7 +111,22 @@ export default function History() {
                       )}
                     </div>
                     <StatusBadge status={item.status || 'pending'} />
+                    {isReplaced && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>{isExpanded ? '▲' : '▼'}</span>
+                    )}
                   </div>
+
+                  {/* פרטי החלפה — מורחב */}
+                  {isReplaced && isExpanded && (
+                    <div style={{
+                      marginTop: 10, padding: '10px 12px', borderRadius: 8,
+                      background: '#fff8f0', border: '1px solid #ffd9a8',
+                    }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 4 }}>אכל במקום:</div>
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--orange)' }}>{item.replaced_with}</div>
+                    </div>
+                  )}
+                  {/* תמיד מוצג: תזמון */}
                   {isCompleted && item.completed_at && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, paddingRight: 46 }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--gray-600)' }}>
@@ -85,13 +144,9 @@ export default function History() {
                       )}
                     </div>
                   )}
-                  {item.status === 'replaced' && item.replaced_with && (
-                    <div style={{ fontSize: '0.78rem', color: 'var(--orange)', marginTop: 4, paddingRight: 46 }}>
-                      הוחלף ב: {item.replaced_with}
-                    </div>
-                  )}
                   {item.photo_url && (
                     <a href={item.photo_url} target="_blank" rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
                       style={{ fontSize: '0.78rem', color: 'var(--green)', marginTop: 4, display: 'block', paddingRight: 46 }}>
                       📷 צפה בתמונה
                     </a>

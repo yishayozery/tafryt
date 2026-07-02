@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useAuth } from '../../hooks/useAuth';
 import { usePush } from '../../hooks/usePush';
 import { MonitoredLayout, StatusBadge } from '../../components/Layout';
+import PlanStats from '../../components/PlanStats';
 
 const OPTION_CONFIG = {
   'אפ׳ 1': { label: 'כמו בתפריט', emoji: '🍽️', color: '#2d6a4f' },
@@ -240,6 +241,11 @@ export default function TaskView() {
             </button>
           )}
         </div>
+
+        {/* סטטיסטיקות — אם יש לוח יחיד */}
+        {!loading && plans.length === 1 && (
+          <PlanStats planId={plans[0].id} />
+        )}
 
         {error && (
           <div className="alert alert-error" style={{ marginBottom: 16 }}>

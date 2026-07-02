@@ -22,13 +22,15 @@ export default function PlanStats({ planId }) {
   const weekDone = stats.week.done + stats.week.replaced;
   const weekTotal = weekDone + stats.week.pending + stats.week.missed;
   const weekPct = weekTotal > 0 ? Math.round((weekDone / weekTotal) * 100) : 0;
+  const onTimePct = weekDone > 0 ? Math.round(((stats.week.on_time || 0) / weekDone) * 100) : null;
 
   return (
     <div style={{ marginBottom: 20 }}>
       {/* כרטיסי KPI */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
         <KpiCard label="היום" value={`${todayDone}/${stats.today.total}`} sub={`${todayPct}%`} color={pctColor(todayPct)} />
         <KpiCard label="שבוע" value={`${weekPct}%`} sub={`${weekDone}/${weekTotal}`} color={pctColor(weekPct)} />
+        <KpiCard label="בזמן" value={onTimePct !== null ? `${onTimePct}%` : '—'} sub="≤10 דק׳" color={onTimePct === null ? 'var(--gray-400)' : pctColor(onTimePct)} />
         <KpiCard label="רצף" value={`${stats.streak}`} sub="ימים" color="var(--orange)" />
       </div>
 
