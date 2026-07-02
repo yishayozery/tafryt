@@ -2,6 +2,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useState, useEffect } from 'react';
 
+/* eslint-disable no-undef */
+const BUILD_LABEL = typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev';
+
 const DAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
 
 export function Navbar({ title, back }) {
@@ -50,6 +53,9 @@ export function SupervisorLayout({ children, title, back }) {
       </nav>
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {children}
+      </div>
+      <div style={{ textAlign: 'center', padding: '2px 0', fontSize: '0.65rem', color: 'var(--gray-400)', background: 'var(--gray-50)', borderTop: '1px solid var(--gray-100)' }}>
+        גרסה {BUILD_LABEL}
       </div>
       <nav className="bottom-tabs">
         {tabs.map((t) => {
@@ -107,6 +113,9 @@ export function MonitoredLayout({ children, title, back }) {
       </nav>
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {children}
+      </div>
+      <div style={{ textAlign: 'center', padding: '4px 0', fontSize: '0.65rem', color: 'var(--gray-400)', borderTop: '1px solid var(--gray-100)' }}>
+        גרסה {BUILD_LABEL}
       </div>
     </div>
   );

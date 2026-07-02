@@ -46,7 +46,7 @@ export default function History() {
         </div>
 
         {/* פילטר סטטוס */}
-        {!loading && allVisible.length > 0 && (
+        {!loading && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
             {[
               { key: 'all',      label: 'הכל',    count: allVisible.length },
