@@ -11,6 +11,7 @@ export default function DailyView() {
   const [plan, setPlan] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('all'); // all | open | replaced
 
   useEffect(() => {
     api.get(`/plans/${id}`).then(r => setPlan(r.data));
@@ -31,10 +32,16 @@ export default function DailyView() {
   }
 
   const visible = items.filter(i => i.status !== 'cancelled');
-  const doneItems = visible.filter(i => i.status === 'done' || i.status === 'replaced');
-  const missedItems = visible.filter(i => i.status === 'missed');
+  const doneItems    = visible.filter(i => i.status === 'done' || i.status === 'replaced');
+  const missedItems  = visible.filter(i => i.status === 'missed');
+  const openItems    = visible.filter(i => !i.status || i.status === 'pending' || i.status === 'missed');
+  const replacedItems = visible.filter(i => i.status === 'replaced');
   const pendingCount = visible.filter(i => !i.status || i.status === 'pending').length;
   const total = visible.length;
+
+  const displayItems = statusFilter === 'open'     ? openItems
+                     : statusFilter === 'replaced'  ? replacedItems
+                     : visible;
 
   const deltas = doneItems.map(i => calcDelta(i, date)).filter(d => d !== null);
   const avgDelta = deltas.length ? Math.round(deltas.reduce((a, b) => a + b, 0) / deltas.length) : null;
@@ -86,13 +93,47 @@ export default function DailyView() {
           </div>
         )}
 
-        {loading && <div className="spinner" />}
-
-        {!loading && visible.length === 0 && (
-          <div className="empty-state"><p>אין משימות לתאריך זה</p></div>
+        {/* פילטר סטטוס */}
+        {!loading && visible.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+            {[
+              { key: 'all',      label: 'הכל',       count: visible.length },
+              { key: 'open',     label: 'פתוח',      count: openItems.length },
+              { key: 'replaced', label: 'החלפות',    count: replacedItems.length },
+            ].map(({ key, label, count }) => (
+              <button key={key} onClick={() => setStatusFilter(key)} style={{
+                padding: '5px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                fontWeight: 600, fontSize: '0.8rem',
+                background: statusFilter === key ? 'var(--green)' : 'var(--gray-100)',
+                color: statusFilter === key ? '#fff' : 'var(--gray-600)',
+              }}>
+                {label}
+                <span style={{
+                  marginRight: 5, fontSize: '0.75rem', opacity: 0.85,
+                  background: statusFilter === key ? 'rgba(255,255,255,0.25)' : 'var(--gray-200)',
+                  borderRadius: 10, padding: '1px 6px',
+                }}>
+                  {count}
+                </span>
+              </button>
+            ))}
+          </div>
         )}
 
-        {visible.map(item => {
+        {loading && <div className="spinner" />}
+
+        {!loading && displayItems.length === 0 && (
+          <div className="empty-state">
+            <p>{statusFilter === 'open' ? 'אין פריטים פתוחים — הכל בוצע!' : 'אין פריטים להצגה'}</p>
+            {statusFilter !== 'all' && (
+              <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setStatusFilter('all')}>
+                הצג הכל
+              </button>
+            )}
+          </div>
+        )}
+
+        {displayItems.map(item => {
           const isCompleted = item.status === 'done' || item.status === 'replaced';
           const isMissed = item.status === 'missed';
           const delta = isCompleted ? calcDelta(item, date) : null;

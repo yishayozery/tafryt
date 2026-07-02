@@ -25,6 +25,7 @@ export default function TaskView() {
   const [selectedOptions, setSelectedOptions] = useState({});
   const [pendingConfirm, setPendingConfirm] = useState(null); // {slotKey, optKey, planId, groups}
   const [optionLoading, setOptionLoading] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const photoRef = useRef();
 
   const today = new Date().toISOString().slice(0, 10);
@@ -187,8 +188,14 @@ export default function TaskView() {
 
   // group visible items by date+time slot
   const visible = visibleItems(allItems);
+  const completedCount = visible.filter(i => i.status === 'done' || i.status === 'replaced').length;
+  const pendingCount  = visible.filter(i => !i.status || i.status === 'pending' || i.status === 'missed').length;
+
+  // סינון לפי showCompleted
+  const filtered = showCompleted ? visible : visible.filter(i => i.status !== 'done' && i.status !== 'replaced');
+
   const grouped = {};
-  for (const item of visible) {
+  for (const item of filtered) {
     const dateKey = item.date || today;
     const timeKey = item.scheduled_time?.slice(0, 5) || '00:00';
     const key = `${dateKey}__${timeKey}`;
@@ -211,11 +218,27 @@ export default function TaskView() {
           </div>
         )}
 
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>שלום, {user?.display_name} 👋</div>
-          <div style={{ color: 'var(--gray-600)', fontSize: '0.85rem' }}>
-            {new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>שלום, {user?.display_name} 👋</div>
+            <div style={{ color: 'var(--gray-600)', fontSize: '0.85rem' }}>
+              {new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
           </div>
+          {!loading && completedCount > 0 && (
+            <button
+              onClick={() => setShowCompleted(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: showCompleted ? 'var(--gray-200)' : 'var(--green)',
+                color: showCompleted ? 'var(--gray-700)' : '#fff',
+                border: 'none', borderRadius: 20, padding: '6px 14px',
+                fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+              }}
+            >
+              {showCompleted ? `הסתר בוצע (${completedCount})` : `+ בוצע (${completedCount})`}
+            </button>
+          )}
         </div>
 
         {error && (
@@ -233,8 +256,14 @@ export default function TaskView() {
 
         {!loading && !error && slots.length === 0 && (
           <div className="empty-state">
-            <p style={{ fontSize: '2rem', marginBottom: 8 }}>🥗</p>
-            <p>אין משימות להיום</p>
+            <p style={{ fontSize: '2rem', marginBottom: 8 }}>{completedCount > 0 ? '✅' : '🥗'}</p>
+            <p>{completedCount > 0 ? 'כל המשימות בוצעו!' : 'אין משימות להיום'}</p>
+            {completedCount > 0 && !showCompleted && (
+              <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }}
+                onClick={() => setShowCompleted(true)}>
+                הצג את מה שבוצע
+              </button>
+            )}
           </div>
         )}
 
