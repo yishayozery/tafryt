@@ -29,11 +29,13 @@ export default function TaskView() {
   const [showCompleted, setShowCompleted] = useState(false);
   const photoRef = useRef();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const isToday = selectedDate === todayStr;
   const now = new Date();
   const currentTime = now.toTimeString().slice(0, 5);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [selectedDate]);
 
   async function loadData() {
     setLoading(true);
@@ -45,11 +47,11 @@ export default function TaskView() {
       const results = [];
       for (const plan of plansData) {
         if (plan.visibility_mode === 'weekly') {
-          const weekStart = getWeekStart(today);
+          const weekStart = getWeekStart(selectedDate);
           const { data } = await api.get(`/plans/${plan.id}/completions/week?start_date=${weekStart}`);
           data.forEach(i => results.push({ ...i, plan }));
         } else {
-          const { data } = await api.get(`/plans/${plan.id}/completions/by-date?date=${today}`);
+          const { data } = await api.get(`/plans/${plan.id}/completions/by-date?date=${selectedDate}`);
           data.forEach(i => results.push({ ...i, plan }));
         }
       }
@@ -59,7 +61,7 @@ export default function TaskView() {
           try {
             const { data } = await api.post(`/plans/${item.plan.id}/completions/ensure`, {
               plan_item_id: item.id,
-              date: item.date || today,
+              date: item.date || selectedDate,
             });
             return { ...item, completion_id: data.id, status: data.status };
           } catch {
@@ -79,10 +81,17 @@ export default function TaskView() {
 
   function visibleItems(items) {
     return items.filter(i => {
-      if (i.plan.visibility_mode !== 'on_time') return true;
+      if (i.plan.visibility_mode !== 'on_time' || !isToday) return true;
       const t = i.scheduled_time?.slice(0, 5);
       return t <= currentTime || i.status === 'done' || i.status === 'replaced';
     });
+  }
+
+  function changeDate(delta) {
+    const d = new Date(selectedDate + 'T12:00:00');
+    d.setDate(d.getDate() + delta);
+    const nd = d.toISOString().slice(0, 10);
+    if (nd <= todayStr) setSelectedDate(nd);
   }
 
   async function submitDone(item) {
@@ -153,6 +162,7 @@ export default function TaskView() {
 
   function canEditCompletion(item) {
     if (!item.completed_at) return false;
+    if (!isToday) return true; // ביום עבר — תמיד מאפשר עריכה
     return (Date.now() - new Date(item.completed_at)) / 60000 <= 60;
   }
 
@@ -197,7 +207,7 @@ export default function TaskView() {
 
   const grouped = {};
   for (const item of filtered) {
-    const dateKey = item.date || today;
+    const dateKey = item.date || selectedDate;
     const timeKey = item.scheduled_time?.slice(0, 5) || '00:00';
     const key = `${dateKey}__${timeKey}`;
     if (!grouped[key]) grouped[key] = { date: dateKey, time: timeKey, items: [] };
@@ -219,12 +229,25 @@ export default function TaskView() {
           </div>
         )}
 
+        {/* ניווט תאריך */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, background: 'var(--gray-50)', borderRadius: 10, padding: '8px 12px' }}>
+          <button onClick={() => changeDate(-1)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', padding: '0 6px', color: 'var(--gray-600)' }}>←</button>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+              {isToday ? 'היום' : new Date(selectedDate + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
+            {!isToday && (
+              <button onClick={() => setSelectedDate(todayStr)} style={{ fontSize: '0.72rem', color: 'var(--green)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 700 }}>
+                חזור להיום
+              </button>
+            )}
+          </div>
+          <button onClick={() => changeDate(1)} disabled={isToday} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: isToday ? 'default' : 'pointer', padding: '0 6px', color: isToday ? 'var(--gray-200)' : 'var(--gray-600)' }}>→</button>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>שלום, {user?.display_name} 👋</div>
-            <div style={{ color: 'var(--gray-600)', fontSize: '0.85rem' }}>
-              {new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </div>
           </div>
           {!loading && completedCount > 0 && (
             <button
