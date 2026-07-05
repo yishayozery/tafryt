@@ -317,7 +317,7 @@ export default function TaskView() {
 
             {slots.map(slot => {
               const slotKey = `${slot.date}__${slot.time}`;
-              const dateLabel = slot.date !== today
+              const dateLabel = slot.date !== todayStr
                 ? new Date(slot.date + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' })
                 : null;
 
