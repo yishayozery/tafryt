@@ -58,6 +58,10 @@ export default function PlanDetail() {
             היסטוריה
           </button>
           <button className="btn btn-secondary btn-full"
+            onClick={() => navigate(`/supervisor/plans/${id}/replacements`)}>
+            טבלת החלפות
+          </button>
+          <button className="btn btn-secondary btn-full"
             onClick={() => navigate(`/supervisor/plans/${id}/edit`)}>
             ערוך שורות תפריט
           </button>

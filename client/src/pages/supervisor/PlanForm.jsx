@@ -58,6 +58,7 @@ export default function PlanForm() {
     start_date: today(), end_date: '',
     visibility_mode: 'daily', photo_required: false,
     alert_threshold_minutes: 30, notify_on_completion: false, allow_replacement: true,
+    allow_retroactive_time: false,
     relationship_type: 'family', supervisor_label: 'הורה', monitored_label: 'ילד',
   });
   const [items, setItems] = useState([]);
@@ -81,6 +82,7 @@ export default function PlanForm() {
           visibility_mode: p.visibility_mode, photo_required: p.photo_required,
           alert_threshold_minutes: p.alert_threshold_minutes, notify_on_completion: p.notify_on_completion,
           allow_replacement: p.allow_replacement ?? true,
+          allow_retroactive_time: p.allow_retroactive_time ?? false,
           relationship_type: p.relationship_type || 'family',
           supervisor_label: p.supervisor_label || 'הורה',
           monitored_label: p.monitored_label || 'ילד',
@@ -413,6 +415,12 @@ export default function PlanForm() {
                 onChange={v => setPlan(p => ({ ...p, allow_replacement: v }))}
                 label="אפשר החלפה בדיווח"
                 sub="המשתתף יכול לדווח שאכל משהו אחר במקום הפריט"
+              />
+              <Toggle
+                checked={!!plan.allow_retroactive_time}
+                onChange={v => setPlan(p => ({ ...p, allow_retroactive_time: v }))}
+                label="אפשר דיווח בדיעבד"
+                sub="המשתתף יכול לציין מתי בפועל בצע את הפעולה (תאריך + שעה)"
               />
             </div>
           </div>

@@ -36,6 +36,7 @@ import PlanForm from './pages/supervisor/PlanForm';
 import PlanDetail from './pages/supervisor/PlanDetail';
 import DailyView from './pages/supervisor/DailyView';
 import History from './pages/supervisor/History';
+import ReplacementsView from './pages/supervisor/ReplacementsView';
 import Notifications from './pages/supervisor/Notifications';
 
 import TaskView from './pages/monitored/TaskView';
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="/supervisor/plans/:id/edit" element={<RequireAuth><PlanForm /></RequireAuth>} />
           <Route path="/supervisor/plans/:id/daily" element={<RequireAuth><DailyView /></RequireAuth>} />
           <Route path="/supervisor/plans/:id/history" element={<RequireAuth><History /></RequireAuth>} />
+          <Route path="/supervisor/plans/:id/replacements" element={<RequireAuth><ReplacementsView /></RequireAuth>} />
 
           {/* מבוקר */}
           <Route path="/my-tasks" element={<RequireAuth><TaskView /></RequireAuth>} />

@@ -136,10 +136,14 @@ router.post('/:completionId/done', requireAuth, upload.single('photo'), async (r
 
     const photo_url = req.file ? `/uploads/${req.file.filename}` : (comp.photo_url || null);
 
+    const completedAt = (plan.allow_retroactive_time && req.body.completed_at)
+      ? new Date(req.body.completed_at)
+      : new Date();
+
     const { rows } = await db.query(
-      `UPDATE completions SET status='done', photo_url=$1, completed_at=NOW()
-       WHERE id=$2 RETURNING *`,
-      [photo_url, comp.id]
+      `UPDATE completions SET status='done', photo_url=$1, completed_at=$2
+       WHERE id=$3 RETURNING *`,
+      [photo_url, completedAt, comp.id]
     );
 
     // התראה למבקר אם הוגדרה
@@ -180,13 +184,46 @@ router.post('/:completionId/replace', requireAuth, upload.single('photo'), async
 
     const photo_url = req.file ? `/uploads/${req.file.filename}` : (comp.photo_url || null);
 
+    const completedAt = (plan.allow_retroactive_time && req.body.completed_at)
+      ? new Date(req.body.completed_at)
+      : new Date();
+
     const { rows } = await db.query(
-      `UPDATE completions SET status='replaced', replaced_with=$1, photo_url=$2, completed_at=NOW()
-       WHERE id=$3 RETURNING *`,
-      [replaced_with, photo_url, comp.id]
+      `UPDATE completions SET status='replaced', replaced_with=$1, photo_url=$2, completed_at=$3
+       WHERE id=$4 RETURNING *`,
+      [replaced_with, photo_url, completedAt, comp.id]
     );
     res.json(rows[0]);
   } catch (err) {
+    res.status(500).json({ error: 'שגיאה פנימית' });
+  }
+});
+
+// טבלת החלפות (מבקר)
+router.get('/replacements', requireAuth, async (req, res) => {
+  try {
+    const plan = await getPlan(req.params.planId, req.user.id);
+    if (!plan) return res.status(404).json({ error: 'לוח לא נמצא' });
+    if (plan.supervisor_id !== req.user.id) return res.status(403).json({ error: 'אין הרשאה' });
+
+    const { from, to } = req.query;
+    const toDate   = to   || new Date().toISOString().slice(0, 10);
+    const fromDate = from || new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+
+    const { rows } = await db.query(
+      `SELECT c.date, c.completed_at, c.replaced_with,
+              pi.item_name, pi.quantity, pi.scheduled_time
+       FROM completions c
+       JOIN plan_items pi ON pi.id = c.plan_item_id
+       WHERE pi.plan_id = $1
+         AND c.status = 'replaced'
+         AND c.date BETWEEN $2 AND $3
+       ORDER BY c.date DESC, pi.scheduled_time`,
+      [req.params.planId, fromDate, toDate]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'שגיאה פנימית' });
   }
 });

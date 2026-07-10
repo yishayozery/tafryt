@@ -38,6 +38,10 @@ if (!process.env.VERCEL) {
   app.use('/uploads', express.static(uploadsDir));
 }
 
+// מיגרציות אוטומטיות — idempotent
+const db = require('./db');
+db.query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS allow_retroactive_time BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
+
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/plans', plansRouter);

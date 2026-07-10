@@ -27,6 +27,7 @@ export default function TaskView() {
   const [pendingConfirm, setPendingConfirm] = useState(null); // {slotKey, optKey, planId, groups}
   const [optionLoading, setOptionLoading] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [retroTime, setRetroTime] = useState(''); // ISO datetime-local string
   const photoRef = useRef();
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -101,6 +102,7 @@ export default function TaskView() {
     try {
       const formData = new FormData();
       if (photo) formData.append('photo', photo);
+      if (retroTime) formData.append('completed_at', new Date(retroTime).toISOString());
       const { data } = await api.post(
         `/plans/${item.plan.id}/completions/${item.completion_id}/done`,
         formData,
@@ -123,6 +125,7 @@ export default function TaskView() {
       const formData = new FormData();
       formData.append('replaced_with', replaceText);
       if (photo) formData.append('photo', photo);
+      if (retroTime) formData.append('completed_at', new Date(retroTime).toISOString());
       const { data } = await api.post(
         `/plans/${item.plan.id}/completions/${item.completion_id}/replace`,
         formData,
@@ -151,6 +154,13 @@ export default function TaskView() {
     setReplaceText('');
     setPhoto(null);
     setError('');
+    // ברירת מחדל לשעה המתוכננת
+    if (item.plan.allow_retroactive_time && item.scheduled_time && item.date) {
+      const dt = `${item.date.slice(0, 10)}T${item.scheduled_time.slice(0, 5)}`;
+      setRetroTime(dt);
+    } else {
+      setRetroTime('');
+    }
   }
 
   function closeSheet() {
@@ -158,6 +168,7 @@ export default function TaskView() {
     setReplaceText('');
     setPhoto(null);
     setError('');
+    setRetroTime('');
   }
 
   function canEditCompletion(item) {
@@ -631,6 +642,14 @@ export default function TaskView() {
                   )}
                   {activeItem.plan.photo_required && (
                     <div className="alert alert-info" style={{ marginBottom: 12 }}>צילום חובה לדיווח</div>
+                  )}
+                  {activeItem.plan.allow_retroactive_time && (
+                    <div className="form-group">
+                      <label>מתי בוצע?</label>
+                      <input type="datetime-local" value={retroTime}
+                        onChange={e => setRetroTime(e.target.value)}
+                        max={new Date().toISOString().slice(0, 16)} />
+                    </div>
                   )}
                   <div className="form-group">
                     <label>{activeItem.plan.photo_required ? 'תמונה (חובה)' : 'תמונה (רשות)'}</label>
