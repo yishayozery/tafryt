@@ -159,8 +159,8 @@ router.post('/test-push', requireAuth, async (req, res) => {
     const u = rows[0];
     if (!u?.push_subscription) return res.status(400).json({ error: 'אין push subscription — אפשר התראות בדפדפן' });
     await sendPush(u.push_subscription, {
-      title: 'בדיקת התראות ✓',
-      body: 'התראות עובדות תקין!',
+      title: 'לוח הבריאות — לא בוצע',
+      body: 'ארוחת בוקר לא דווחה עד כה (זוהי הודעת בדיקה)',
     });
     res.json({ ok: true });
   } catch (err) {
