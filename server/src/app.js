@@ -41,6 +41,7 @@ if (!process.env.VERCEL) {
 // מיגרציות אוטומטיות — idempotent
 const db = require('./db');
 db.query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS allow_retroactive_time BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
+db.query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS pre_alert_reminder_minutes INTEGER NOT NULL DEFAULT 0`).catch(() => {});
 
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);

@@ -30,12 +30,16 @@ router.post('/missed-items', verifyCronSecret, async (req, res) => {
          p.name AS plan_name,
          p.alert_threshold_minutes,
          p.supervisor_id,
+         p.pre_alert_reminder_minutes,
          u.push_subscription AS supervisor_push,
+         um.push_subscription AS monitored_push,
+         p.monitored_id,
          c.id AS completion_id,
          c.status
        FROM plan_items pi
        JOIN plans p ON p.id = pi.plan_id
        JOIN users u ON u.id = p.supervisor_id
+       JOIN users um ON um.id = p.monitored_id
        LEFT JOIN completions c ON c.plan_item_id = pi.id AND c.date = $1
        WHERE p.start_date <= $1 AND p.end_date >= $1
          AND (pi.day_of_week = $2 OR pi.specific_date = $1)
@@ -46,6 +50,74 @@ router.post('/missed-items', verifyCronSecret, async (req, res) => {
          )`,
       [todayStr, dayOfWeek]
     );
+
+    // תזכורת מוקדמת למבוקר — לפני שהמבקר מקבל התראה
+    const { rows: preAlertItems } = await db.query(
+      `SELECT
+         pi.id AS plan_item_id,
+         pi.item_name,
+         p.alert_threshold_minutes,
+         p.pre_alert_reminder_minutes,
+         p.monitored_id,
+         um.push_subscription AS monitored_push,
+         c.id AS completion_id
+       FROM plan_items pi
+       JOIN plans p ON p.id = pi.plan_id
+       JOIN users um ON um.id = p.monitored_id
+       LEFT JOIN completions c ON c.plan_item_id = pi.id AND c.date = $1
+       WHERE p.start_date <= $1 AND p.end_date >= $1
+         AND (pi.day_of_week = $2 OR pi.specific_date = $1)
+         AND (c.status IS NULL OR c.status = 'pending')
+         AND p.pre_alert_reminder_minutes > 0
+         AND um.push_subscription IS NOT NULL
+         AND (
+           NOW() AT TIME ZONE 'Asia/Jerusalem' >=
+           ($1::date + pi.scheduled_time + ((p.alert_threshold_minutes - p.pre_alert_reminder_minutes) || ' minutes')::interval)
+         )
+         AND (
+           NOW() AT TIME ZONE 'Asia/Jerusalem' <
+           ($1::date + pi.scheduled_time + (p.alert_threshold_minutes || ' minutes')::interval)
+         )`,
+      [todayStr, dayOfWeek]
+    );
+
+    for (const item of preAlertItems) {
+      // בדוק שלא שלחנו כבר
+      if (item.completion_id) {
+        const already = await db.query(
+          `SELECT id FROM notifications WHERE related_completion_id = $1 AND type = 'pre_alert_reminder'`,
+          [item.completion_id]
+        );
+        if (already.rows.length > 0) continue;
+      } else {
+        // אין completion — בדוק לפי plan_item_id והיום
+        const already = await db.query(
+          `SELECT n.id FROM notifications n
+           JOIN completions c ON c.id = n.related_completion_id
+           WHERE c.plan_item_id = $1 AND c.date = $2 AND n.type = 'pre_alert_reminder'`,
+          [item.plan_item_id, todayStr]
+        );
+        if (already.rows.length > 0) continue;
+      }
+
+      await sendPush(item.monitored_push, {
+        title: 'תזכורת — עדיין לא דיווחת',
+        body: `עוד ${item.pre_alert_reminder_minutes} דקות: ${item.item_name} יסומן כפוספס`,
+      });
+
+      // רשום כדי לא לשלוח שוב
+      const { rows: compRows } = await db.query(
+        'SELECT id FROM completions WHERE plan_item_id=$1 AND date=$2',
+        [item.plan_item_id, todayStr]
+      );
+      if (compRows.length > 0) {
+        await db.query(
+          `INSERT INTO notifications (recipient_id, type, related_completion_id)
+           VALUES ($1,'pre_alert_reminder',$2) ON CONFLICT DO NOTHING`,
+          [item.monitored_id, compRows[0].id]
+        );
+      }
+    }
 
     let processed = 0;
     for (const item of items) {

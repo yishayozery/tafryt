@@ -59,6 +59,7 @@ export default function PlanForm() {
     visibility_mode: 'daily', photo_required: false,
     alert_threshold_minutes: 30, notify_on_completion: false, allow_replacement: true,
     allow_retroactive_time: false,
+    pre_alert_reminder_minutes: 0,
     relationship_type: 'family', supervisor_label: 'הורה', monitored_label: 'ילד',
   });
   const [items, setItems] = useState([]);
@@ -83,6 +84,7 @@ export default function PlanForm() {
           alert_threshold_minutes: p.alert_threshold_minutes, notify_on_completion: p.notify_on_completion,
           allow_replacement: p.allow_replacement ?? true,
           allow_retroactive_time: p.allow_retroactive_time ?? false,
+          pre_alert_reminder_minutes: p.pre_alert_reminder_minutes ?? 0,
           relationship_type: p.relationship_type || 'family',
           supervisor_label: p.supervisor_label || 'הורה',
           monitored_label: p.monitored_label || 'ילד',
@@ -422,6 +424,19 @@ export default function PlanForm() {
                 label="אפשר דיווח בדיעבד"
                 sub="המשתתף יכול לציין מתי בפועל בצע את הפעולה (תאריך + שעה)"
               />
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>תזכורת למבוקר לפני התראה למבקר (דקות, 0 = כבוי)</label>
+                <input
+                  type="number" min="0" max="60"
+                  value={plan.pre_alert_reminder_minutes}
+                  onChange={e => setPlan(p => ({ ...p, pre_alert_reminder_minutes: +e.target.value }))}
+                />
+                {plan.pre_alert_reminder_minutes > 0 && (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--gray-500)', marginTop: 4 }}>
+                    המבוקר יקבל Push {plan.pre_alert_reminder_minutes} דקות לפני שהמבקר יקבל התראה
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

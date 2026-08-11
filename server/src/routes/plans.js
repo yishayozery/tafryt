@@ -64,7 +64,7 @@ router.post('/', requireAuth, async (req, res) => {
     monitored_id, name, type, start_date, end_date,
     visibility_mode, photo_required, alert_threshold_minutes, notify_on_completion,
     relationship_type, supervisor_label, monitored_label, allow_replacement,
-    allow_retroactive_time,
+    allow_retroactive_time, pre_alert_reminder_minutes,
   } = req.body;
 
   if (!monitored_id || !name || !start_date || !end_date) {
@@ -82,8 +82,9 @@ router.post('/', requireAuth, async (req, res) => {
       `INSERT INTO plans
          (supervisor_id, monitored_id, name, type, start_date, end_date,
           visibility_mode, photo_required, alert_threshold_minutes, notify_on_completion,
-          relationship_type, supervisor_label, monitored_label, allow_replacement, allow_retroactive_time)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          relationship_type, supervisor_label, monitored_label, allow_replacement, allow_retroactive_time,
+          pre_alert_reminder_minutes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING *`,
       [
         req.user.id, monitored_id, name, type || 'meal', start_date, end_date,
@@ -96,6 +97,7 @@ router.post('/', requireAuth, async (req, res) => {
         monitored_label || 'ילד',
         allow_replacement ?? true,
         allow_retroactive_time ?? false,
+        pre_alert_reminder_minutes ?? 0,
       ]
     );
     res.status(201).json(rows[0]);
@@ -111,7 +113,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     name, type, end_date, visibility_mode,
     photo_required, alert_threshold_minutes, notify_on_completion,
     relationship_type, supervisor_label, monitored_label, allow_replacement,
-    allow_retroactive_time,
+    allow_retroactive_time, pre_alert_reminder_minutes,
   } = req.body;
 
   try {
@@ -127,8 +129,9 @@ router.put('/:id', requireAuth, async (req, res) => {
          visibility_mode = $4, photo_required = $5,
          alert_threshold_minutes = $6, notify_on_completion = $7,
          relationship_type = $8, supervisor_label = $9, monitored_label = $10,
-         allow_replacement = $11, allow_retroactive_time = $12
-       WHERE id = $13 RETURNING *`,
+         allow_replacement = $11, allow_retroactive_time = $12,
+         pre_alert_reminder_minutes = $13
+       WHERE id = $14 RETURNING *`,
       [
         name ?? plan.name,
         type ?? plan.type,
@@ -142,6 +145,7 @@ router.put('/:id', requireAuth, async (req, res) => {
         monitored_label ?? plan.monitored_label,
         allow_replacement ?? plan.allow_replacement,
         allow_retroactive_time ?? plan.allow_retroactive_time ?? false,
+        pre_alert_reminder_minutes ?? plan.pre_alert_reminder_minutes ?? 0,
         req.params.id,
       ]
     );
