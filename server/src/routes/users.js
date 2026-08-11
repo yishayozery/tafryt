@@ -68,6 +68,19 @@ router.get('/supervisors', requireAuth, async (req, res) => {
   }
 });
 
+// מידע על המשתמש הנוכחי
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      'SELECT id, display_name, username, push_subscription IS NOT NULL AS push_subscription FROM users WHERE id=$1',
+      [req.user.id]
+    );
+    res.json(rows[0] || {});
+  } catch (err) {
+    res.status(500).json({ error: 'שגיאה פנימית' });
+  }
+});
+
 // שמירת Push subscription
 router.post('/push-subscription', requireAuth, async (req, res) => {
   const { subscription } = req.body;
