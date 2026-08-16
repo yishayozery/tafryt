@@ -104,12 +104,22 @@ router.get('/history', requireAuth, async (req, res) => {
 
     const { rows } = await db.query(
       `SELECT pi.item_name, pi.quantity, pi.scheduled_time, pi.day_of_week, pi.specific_date,
-              c.date, c.status, c.replaced_with, c.photo_url, c.completed_at
-       FROM completions c
-       JOIN plan_items pi ON pi.id = c.plan_item_id
-       WHERE pi.plan_id = $1
-         AND c.date BETWEEN $2 AND $3
-       ORDER BY c.date DESC, pi.scheduled_time`,
+              d.date::date AS date,
+              c.status, c.replaced_with, c.photo_url, c.completed_at
+       FROM plans p
+       CROSS JOIN generate_series(
+         GREATEST($2::date, p.start_date),
+         LEAST($3::date, p.end_date),
+         '1 day'::interval
+       ) AS d(date)
+       JOIN plan_items pi ON pi.plan_id = p.id
+         AND (
+           pi.specific_date = d.date::date
+           OR pi.day_of_week = EXTRACT(DOW FROM d.date)::int
+         )
+       LEFT JOIN completions c ON c.plan_item_id = pi.id AND c.date = d.date::date
+       WHERE p.id = $1
+       ORDER BY d.date DESC, pi.scheduled_time`,
       [req.params.planId, from || '1970-01-01', to || '9999-12-31']
     );
     res.json(rows);
