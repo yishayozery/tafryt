@@ -123,12 +123,13 @@ export function MonitoredLayout({ children, title, back }) {
 
 export function StatusBadge({ status }) {
   const map = {
-    done: { label: 'בוצע', cls: 'badge-done' },
-    pending: { label: 'ממתין', cls: 'badge-pending' },
-    missed: { label: 'פוספס', cls: 'badge-missed' },
-    replaced: { label: 'הוחלף', cls: 'badge-replaced' },
+    done:     { label: 'בוצע',     cls: 'badge-done' },
+    pending:  { label: 'ממתין',    cls: 'badge-pending' },
+    missed:   { label: 'פוספס',   cls: 'badge-missed' },
+    replaced: { label: 'הוחלף',   cls: 'badge-replaced' },
+    null:     { label: 'לא דווח', cls: 'badge-unreported' },
   };
-  const s = map[status] || map.pending;
+  const s = map[status] ?? map['null'];
   return <span className={`badge ${s.cls}`}>{s.label}</span>;
 }
 

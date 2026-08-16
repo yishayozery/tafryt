@@ -72,6 +72,7 @@ label { font-size: 0.875rem; font-weight: 600; color: var(--gray-800); display: 
 .badge-pending { background: #fff3cd; color: #856404; }
 .badge-missed { background: #f8d7da; color: #721c24; }
 .badge-replaced { background: #d1ecf1; color: #0c5460; }
+.badge-unreported { background: var(--gray-100); color: var(--gray-500); }
 
 .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot-done { background: #28a745; }
