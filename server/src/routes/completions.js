@@ -156,18 +156,17 @@ router.post('/:completionId/done', requireAuth, upload.single('photo'), async (r
       [photo_url, completedAt, comp.id]
     );
 
-    // התראה למבקר אם הוגדרה
+    res.json(rows[0]);
+
+    // התראה למבקר — ברקע, לא חוסם את התשובה
     if (plan.notify_on_completion) {
-      const supervisor = await db.query('SELECT push_subscription, display_name FROM users WHERE id=$1', [plan.supervisor_id]);
-      if (supervisor.rows[0]?.push_subscription) {
-        await sendPush(supervisor.rows[0].push_subscription, {
+      db.query('SELECT push_subscription FROM users WHERE id=$1', [plan.supervisor_id])
+        .then(r => r.rows[0]?.push_subscription && sendPush(r.rows[0].push_subscription, {
           title: `${plan.name} — בוצע`,
           body: `${comp.item_name} סומן כבוצע`,
-        });
-      }
+        }))
+        .catch(() => {});
     }
-
-    res.json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה פנימית' });
