@@ -95,46 +95,56 @@ export default function TaskView() {
     if (nd <= todayStr) setSelectedDate(nd);
   }
 
+  async function getOrEnsureCompletionId(item) {
+    if (item.completion_id) return item.completion_id;
+    const { data } = await api.post(`/plans/${item.plan.id}/completions/ensure`, {
+      plan_item_id: item.id,
+      date: item.date || selectedDate,
+    });
+    if (!data?.id) throw new Error('לא ניתן ליצור דיווח — נסה לרענן');
+    setAllItems(prev => prev.map(i => i.id === item.id ? { ...i, completion_id: data.id, status: data.status } : i));
+    return data.id;
+  }
+
   async function submitDone(item) {
-    if (!item.completion_id) return;
     setSubmitting(true);
     setError('');
     try {
+      const completionId = await getOrEnsureCompletionId(item);
       const formData = new FormData();
       if (photo) formData.append('photo', photo);
       if (retroTime) formData.append('completed_at', new Date(retroTime).toISOString());
       const { data } = await api.post(
-        `/plans/${item.plan.id}/completions/${item.completion_id}/done`,
-        formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        `/plans/${item.plan.id}/completions/${completionId}/done`,
+        formData
       );
       updateItem(item, data);
       closeSheet();
     } catch (err) {
-      setError(err.response?.data?.error || 'שגיאה');
+      setError(err.response?.data?.error || err.message || 'שגיאה');
     } finally {
       setSubmitting(false);
     }
   }
 
   async function submitReplace(item) {
-    if (!replaceText.trim() || !item.completion_id) return;
+    if (!replaceText.trim()) return;
     setSubmitting(true);
     setError('');
     try {
+      const completionId = await getOrEnsureCompletionId(item);
       const formData = new FormData();
       formData.append('replaced_with', replaceText);
       if (photo) formData.append('photo', photo);
       if (retroTime) formData.append('completed_at', new Date(retroTime).toISOString());
       const { data } = await api.post(
-        `/plans/${item.plan.id}/completions/${item.completion_id}/replace`,
-        formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        `/plans/${item.plan.id}/completions/${completionId}/replace`,
+        formData
       );
       updateItem(item, data);
       closeSheet();
     } catch (err) {
-      setError(err.response?.data?.error || 'שגיאה');
+      setError(err.response?.data?.error || err.message || 'שגיאה');
     } finally {
       setSubmitting(false);
     }
