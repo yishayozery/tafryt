@@ -5,15 +5,18 @@ import api from '../../api/client';
 
 export default function Notifications() {
   const { permission, requestPermission } = usePush();
-  const [testStatus, setTestStatus] = useState(null); // null | 'sending' | 'ok' | 'error'
+  const [testStatus, setTestStatus] = useState(null);
   const [cronStatus, setCronStatus] = useState(null);
-  const [subSaved, setSubSaved] = useState(null); // null | true | false
+  const [subSaved, setSubSaved] = useState(null);
+  const [tgLinked, setTgLinked] = useState(null);
+  const [tgCode, setTgCode] = useState(null);
+  const [tgBotUrl, setTgBotUrl] = useState(null);
+  const [tgCopied, setTgCopied] = useState(false);
 
   useEffect(() => {
-    // בדיקת מצב cron
     api.get('/cron/status').then(r => setCronStatus(r.data)).catch(() => {});
-    // בדיקה אם ה-subscription נשמר בשרת
     api.get('/users/me').then(r => setSubSaved(!!r.data.push_subscription)).catch(() => {});
+    api.get('/telegram/status').then(r => setTgLinked(r.data.linked)).catch(() => {});
   }, []);
 
   async function sendTestPush() {
@@ -28,92 +31,137 @@ export default function Notifications() {
 
   async function handleEnable() {
     const result = await requestPermission();
-    if (result === 'granted') {
-      setSubSaved(true);
+    if (result === 'granted') setSubSaved(true);
+  }
+
+  async function handleTgLink() {
+    try {
+      const { data } = await api.post('/telegram/link');
+      setTgCode(data.code);
+      setTgBotUrl(data.bot_url);
+    } catch (err) {
+      alert('שגיאה ביצירת קוד: ' + (err.response?.data?.error || err.message));
     }
   }
 
-  const isOk = permission === 'granted' && subSaved;
+  async function handleTgUnlink() {
+    await api.delete('/telegram/link');
+    setTgLinked(false);
+    setTgCode(null);
+  }
+
+  async function copyCode() {
+    if (tgCode) {
+      await navigator.clipboard.writeText(tgCode);
+      setTgCopied(true);
+      setTimeout(() => setTgCopied(false), 2000);
+    }
+  }
+
+  const pushOk = permission === 'granted' && subSaved;
 
   return (
     <SupervisorLayout title="התראות">
       <div className="page">
 
-        {/* סטטוס כולל */}
-        <div style={{
-          padding: '14px 16px', borderRadius: 12, marginBottom: 20,
-          background: isOk ? '#d4edda' : '#fff3cd',
-          border: `1px solid ${isOk ? '#c3e6cb' : '#ffeaa7'}`,
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <span style={{ fontSize: '1.5rem' }}>{isOk ? '✅' : '⚠️'}</span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: isOk ? '#155724' : '#856404' }}>
-              {isOk ? 'התראות מוגדרות ופעילות' : 'יש להגדיר התראות'}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: isOk ? '#155724' : '#856404', marginTop: 2 }}>
-              {isOk ? 'תקבל התראה כשמבוקר לא מדווח בזמן' : 'בצע את הצעדים הבאים כדי לקבל התראות'}
+        {/* ── טלגרם (ראשי) ── */}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{
+            padding: '14px 16px', borderRadius: 12, marginBottom: 10,
+            background: tgLinked ? '#d4edda' : '#e8f4fd',
+            border: `1px solid ${tgLinked ? '#c3e6cb' : '#bee5fd'}`,
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: '1.5rem' }}>{tgLinked ? '✅' : '📱'}</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: tgLinked ? '#155724' : '#0c5460' }}>
+                {tgLinked ? 'טלגרם מחובר ✓' : 'חבר טלגרם — מומלץ!'}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: tgLinked ? '#155724' : '#0c5460', marginTop: 2 }}>
+                {tgLinked
+                  ? 'תקבל התראות בטלגרם — עובד על כל מכשיר'
+                  : 'עובד על iOS ואנדרואיד ללא התקנה מיוחדת'}
+              </div>
             </div>
           </div>
+
+          {tgLinked ? (
+            <button className="btn btn-secondary btn-full btn-sm" onClick={handleTgUnlink}>
+              נתק טלגרם
+            </button>
+          ) : tgCode ? (
+            <div className="card" style={{ marginTop: 6 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>קוד חיבור (תקף 10 דקות)</div>
+              <div style={{
+                fontSize: '2rem', letterSpacing: 6, fontWeight: 800,
+                textAlign: 'center', color: 'var(--green)', padding: '10px 0',
+              }}>
+                {tgCode}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <a href={tgBotUrl} target="_blank" rel="noreferrer"
+                  className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                  פתח בוט
+                </a>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={copyCode}>
+                  {tgCopied ? '✓ הועתק' : 'העתק קוד'}
+                </button>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--gray-500)', marginTop: 10, lineHeight: 1.6 }}>
+                1. לחץ "פתח בוט" ← שלח /start<br />
+                2. שלח את הקוד {tgCode} לבוט<br />
+                3. קבל אישור חיבור
+              </div>
+            </div>
+          ) : (
+            <button className="btn btn-primary btn-full" onClick={handleTgLink}>
+              📱 חבר טלגרם
+            </button>
+          )}
         </div>
 
-        {/* צעד 1 — הרשאת דפדפן */}
-        <StepCard
-          num="1"
-          title="הרשאת התראות בדפדפן"
-          done={permission === 'granted'}
-          fail={permission === 'denied'}
-        >
+        <hr className="divider" />
+
+        {/* ── Push Notifications ── */}
+        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--gray-600)', marginBottom: 8 }}>
+          התראות Push (iOS Home Screen)
+        </div>
+
+        <StepCard num="1" title="הרשאת התראות בדפדפן" done={permission === 'granted'} fail={permission === 'denied'}>
           {permission === 'granted' && <div className="alert alert-success">הרשאה ניתנה ✓</div>}
           {permission === 'denied' && (
             <div className="alert alert-error">
-              חסום — יש להפעיל ידנית: הגדרות הדפדפן ← אתר זה ← התראות ← אפשר
+              חסום — הגדרות הדפדפן ← אתר זה ← התראות ← אפשר
             </div>
           )}
           {permission === 'default' && (
-            <button className="btn btn-primary btn-full" onClick={handleEnable}>
-              הפעל התראות
-            </button>
+            <button className="btn btn-primary btn-full" onClick={handleEnable}>הפעל התראות</button>
           )}
         </StepCard>
 
-        {/* צעד 2 — subscription נשמר */}
-        <StepCard
-          num="2"
-          title="רישום בשרת"
-          done={subSaved === true}
-          fail={subSaved === false && permission === 'granted'}
-        >
-          {subSaved === true && <div className="alert alert-success">ה-subscription נשמר בשרת ✓</div>}
+        <StepCard num="2" title="רישום בשרת" done={subSaved === true} fail={subSaved === false && permission === 'granted'}>
+          {subSaved === true && <div className="alert alert-success">נרשם בשרת ✓</div>}
           {subSaved === false && permission === 'granted' && (
-            <>
-              <div className="alert alert-error" style={{ marginBottom: 8 }}>הרישום לא הושלם</div>
-              <button className="btn btn-primary btn-full" onClick={handleEnable}>הרשם מחדש</button>
-            </>
+            <><div className="alert alert-error" style={{ marginBottom: 8 }}>הרישום לא הושלם</div>
+              <button className="btn btn-primary btn-full" onClick={handleEnable}>הרשם מחדש</button></>
           )}
           {(subSaved === null || permission !== 'granted') && (
             <div style={{ color: 'var(--gray-500)', fontSize: '0.85rem' }}>ממתין להרשאה...</div>
           )}
         </StepCard>
 
-        {/* צעד 3 — בדיקת שליחה */}
-        <StepCard num="3" title="בדיקת שליחת התראה" done={testStatus === 'ok'}>
-          <button
-            className="btn btn-secondary btn-full"
-            onClick={sendTestPush}
-            disabled={testStatus === 'sending' || !isOk}
-          >
+        <StepCard num="3" title="בדיקת שליחה" done={testStatus === 'ok'}>
+          <button className="btn btn-secondary btn-full" onClick={sendTestPush}
+            disabled={testStatus === 'sending' || !pushOk}>
             {testStatus === 'sending' ? 'שולח...' : '📳 שלח התראת בדיקה'}
           </button>
           {testStatus === 'ok' && (
             <div className="alert alert-success" style={{ marginTop: 8 }}>
-              נשלחה! אם לא הגיעה — בדוק שה-PWA מותקן ב-Home Screen (iOS)
+              נשלחה! אם לא הגיעה — ודא שה-PWA מותקן ב-Home Screen (iOS)
             </div>
           )}
           {testStatus?.startsWith('error:') && (
-            <div className="alert alert-error" style={{ marginTop: 8 }}>
-              שגיאה: {testStatus.slice(6)}
-            </div>
+            <div className="alert alert-error" style={{ marginTop: 8 }}>שגיאה: {testStatus.slice(6)}</div>
           )}
         </StepCard>
 
@@ -126,23 +174,12 @@ export default function Notifications() {
               <Row label="פוספסו" value={cronStatus.missed_today} color="var(--red)" />
               <Row label="ממתינות" value={cronStatus.pending_today} color="var(--gray-600)" />
               <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--gray-400)' }}>
-                הסריקה רצה כל דקה דרך cron-job.org
+                סריקה כל דקה דרך cron-job.org
               </div>
             </div>
           ) : (
             <div style={{ color: 'var(--gray-400)', fontSize: '0.85rem' }}>טוען...</div>
           )}
-        </div>
-
-        {/* הסבר */}
-        <div className="card" style={{ marginTop: 8, fontSize: '0.82rem', color: 'var(--gray-600)', lineHeight: 1.7 }}>
-          <strong>איך זה עובד?</strong>
-          <ul style={{ paddingRight: 18, marginTop: 6 }}>
-            <li>כל דקה: סריקה אוטומטית של כל הפריטים שלא דווחו</li>
-            <li>אם עבר זמן ההמתנה שהוגדר בלוח — ישלח Push</li>
-            <li>ב-iOS: ה-PWA חייב להיות מותקן ב-Home Screen</li>
-            <li>ב-Android: עובד גם בדפדפן Chrome רגיל</li>
-          </ul>
         </div>
 
       </div>

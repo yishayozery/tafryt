@@ -4,6 +4,7 @@ const multer = require('multer');
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { sendPush } = require('../services/push');
+const { sendMessage: sendTelegram } = require('../services/telegram');
 
 const router = express.Router({ mergeParams: true });
 
@@ -160,11 +161,14 @@ router.post('/:completionId/done', requireAuth, upload.single('photo'), async (r
 
     // התראה למבקר — ברקע, לא חוסם את התשובה
     if (plan.notify_on_completion) {
-      db.query('SELECT push_subscription FROM users WHERE id=$1', [plan.supervisor_id])
-        .then(r => r.rows[0]?.push_subscription && sendPush(r.rows[0].push_subscription, {
-          title: `${plan.name} — בוצע`,
-          body: `${comp.item_name} סומן כבוצע`,
-        }))
+      db.query('SELECT push_subscription, telegram_chat_id FROM users WHERE id=$1', [plan.supervisor_id])
+        .then(r => {
+          const u = r.rows[0];
+          if (!u) return;
+          const msg = { title: `${plan.name} — בוצע`, body: `${comp.item_name} סומן כבוצע` };
+          if (u.push_subscription) sendPush(u.push_subscription, msg).catch(() => {});
+          if (u.telegram_chat_id) sendTelegram(u.telegram_chat_id, `✅ <b>${plan.name}</b>\n${comp.item_name} סומן כבוצע`).catch(() => {});
+        })
         .catch(() => {});
     }
   } catch (err) {

@@ -13,6 +13,7 @@ const statsRouter = require('./routes/stats');
 const adminRouter = require('./routes/admin');
 const cronRouter = require('./routes/cron');
 const ocrRouter = require('./routes/ocr');
+const telegramRouter = require('./routes/telegram');
 
 const app = express();
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -42,6 +43,15 @@ if (!process.env.VERCEL) {
 const db = require('./db');
 db.query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS allow_retroactive_time BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
 db.query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS pre_alert_reminder_minutes INTEGER NOT NULL DEFAULT 0`).catch(() => {});
+db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT`).catch(() => {});
+db.query(`
+  CREATE TABLE IF NOT EXISTS telegram_link_codes (
+    code TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    UNIQUE(user_id)
+  )
+`).catch(() => {});
 
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
@@ -52,6 +62,7 @@ app.use('/api/plans/:planId/stats', statsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/cron', cronRouter);
 app.use('/api/ocr', ocrRouter);
+app.use('/api/telegram', telegramRouter);
 
 app.get('/api/vapid-public-key', (req, res) => {
   res.json({ key: process.env.VAPID_PUBLIC_KEY });

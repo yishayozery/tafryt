@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { sendPush } = require('../services/push');
+const { sendMessage: sendTelegram } = require('../services/telegram');
 
 // הגנה על endpoints — רק עם CRON_SECRET
 function verifyCronSecret(req, res, next) {
@@ -51,6 +52,19 @@ router.post('/missed-items', verifyCronSecret, async (req, res) => {
       [todayStr, dayOfWeek]
     );
 
+    // fetch telegram chat ids for supervisor and monitored
+    const supervisorIds = [...new Set(items.map(i => i.supervisor_id))];
+    const monitoredIds  = [...new Set(items.map(i => i.monitored_id))];
+    const allIds = [...new Set([...supervisorIds, ...monitoredIds])];
+    let telegramMap = {};
+    if (allIds.length) {
+      const { rows: tgRows } = await db.query(
+        `SELECT id, telegram_chat_id FROM users WHERE id = ANY($1) AND telegram_chat_id IS NOT NULL`,
+        [allIds]
+      );
+      tgRows.forEach(r => { telegramMap[r.id] = r.telegram_chat_id; });
+    }
+
     // תזכורת מוקדמת למבוקר — לפני שהמבקר מקבל התראה
     const { rows: preAlertItems } = await db.query(
       `SELECT
@@ -69,7 +83,7 @@ router.post('/missed-items', verifyCronSecret, async (req, res) => {
          AND (pi.day_of_week = $2 OR pi.specific_date = $1)
          AND (c.status IS NULL OR c.status = 'pending')
          AND p.pre_alert_reminder_minutes > 0
-         AND um.push_subscription IS NOT NULL
+         AND (um.push_subscription IS NOT NULL OR um.telegram_chat_id IS NOT NULL)
          AND (
            NOW() AT TIME ZONE 'Asia/Jerusalem' >=
            ($1::date + pi.scheduled_time + ((p.alert_threshold_minutes - p.pre_alert_reminder_minutes) || ' minutes')::interval)
@@ -80,6 +94,16 @@ router.post('/missed-items', verifyCronSecret, async (req, res) => {
          )`,
       [todayStr, dayOfWeek]
     );
+
+    // הוסף monitored IDs מ-preAlertItems ל-telegramMap
+    const preMonIds = [...new Set(preAlertItems.map(i => i.monitored_id).filter(id => !telegramMap[id]))];
+    if (preMonIds.length) {
+      const { rows: tgExtra } = await db.query(
+        `SELECT id, telegram_chat_id FROM users WHERE id = ANY($1) AND telegram_chat_id IS NOT NULL`,
+        [preMonIds]
+      );
+      tgExtra.forEach(r => { telegramMap[r.id] = r.telegram_chat_id; });
+    }
 
     for (const item of preAlertItems) {
       // בדוק שלא שלחנו כבר
@@ -100,10 +124,18 @@ router.post('/missed-items', verifyCronSecret, async (req, res) => {
         if (already.rows.length > 0) continue;
       }
 
-      await sendPush(item.monitored_push, {
-        title: 'תזכורת — עדיין לא דיווחת',
-        body: `עוד ${item.pre_alert_reminder_minutes} דקות: ${item.item_name} יסומן כפוספס`,
-      });
+      if (item.monitored_push) {
+        await sendPush(item.monitored_push, {
+          title: 'תזכורת — עדיין לא דיווחת',
+          body: `עוד ${item.pre_alert_reminder_minutes} דקות: ${item.item_name} יסומן כפוספס`,
+        });
+      }
+      const tgId = telegramMap[item.monitored_id];
+      if (tgId) {
+        await sendTelegram(tgId,
+          `⏳ תזכורת: עוד ${item.pre_alert_reminder_minutes} דקות\n<b>${item.item_name}</b> יסומן כפוספס אם לא תדווח`
+        );
+      }
 
       // רשום כדי לא לשלוח שוב
       const { rows: compRows } = await db.query(
@@ -144,6 +176,23 @@ router.post('/missed-items', verifyCronSecret, async (req, res) => {
           body: `${item.item_name} לא דווח עד כה`,
         });
       }
+      const supTg = telegramMap[item.supervisor_id];
+      if (supTg) {
+        await sendTelegram(supTg, `⚠️ <b>${item.plan_name}</b>\n${item.item_name} — לא דווח עד כה`);
+      }
+      // notify monitored too (if they have telegram) so they can still report
+      const { rows: compForBtn } = await db.query(
+        'SELECT id FROM completions WHERE plan_item_id=$1 AND date=$2',
+        [item.plan_item_id, todayStr]
+      );
+      const monTg = telegramMap[item.monitored_id];
+      if (monTg && compForBtn.length > 0) {
+        await sendTelegram(monTg, `⏰ <b>${item.item_name}</b> — לא דווח\nלחץ לסמן כבוצע:`, {
+          reply_markup: {
+            inline_keyboard: [[{ text: '✅ בוצע!', callback_data: `done:${compForBtn[0].id}` }]],
+          },
+        });
+      }
 
       const { rows: compRows } = await db.query(
         'SELECT id FROM completions WHERE plan_item_id=$1 AND date=$2',
@@ -176,7 +225,7 @@ router.post('/reminders', verifyCronSecret, async (req, res) => {
     const currentMinute = now.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hour12: false });
 
     const { rows: items } = await db.query(
-      `SELECT pi.item_name, p.name AS plan_name, um.push_subscription
+      `SELECT pi.item_name, p.name AS plan_name, um.push_subscription, p.monitored_id
        FROM plan_items pi
        JOIN plans p ON p.id = pi.plan_id
        JOIN users um ON um.id = p.monitored_id
@@ -188,12 +237,28 @@ router.post('/reminders', verifyCronSecret, async (req, res) => {
       [todayStr, dayOfWeek, currentMinute]
     );
 
+    const monitoredTgMap = {};
+    if (items.length) {
+      const monIds = [...new Set(items.map(i => i.monitored_id).filter(Boolean))];
+      if (monIds.length) {
+        const { rows: tgRows } = await db.query(
+          `SELECT id, telegram_chat_id FROM users WHERE id = ANY($1) AND telegram_chat_id IS NOT NULL`,
+          [monIds]
+        );
+        tgRows.forEach(r => { monitoredTgMap[r.id] = r.telegram_chat_id; });
+      }
+    }
+
     for (const item of items) {
       if (item.push_subscription) {
         await sendPush(item.push_subscription, {
           title: item.plan_name,
           body: `הגיע הזמן: ${item.item_name}`,
         });
+      }
+      const tgId = monitoredTgMap[item.monitored_id];
+      if (tgId) {
+        await sendTelegram(tgId, `🍽️ <b>${item.plan_name}</b>\nהגיע הזמן: ${item.item_name}`);
       }
     }
 
