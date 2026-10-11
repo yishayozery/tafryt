@@ -44,6 +44,8 @@ const db = require('./db');
 db.query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS allow_retroactive_time BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
 db.query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS pre_alert_reminder_minutes INTEGER NOT NULL DEFAULT 0`).catch(() => {});
 db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT`).catch(() => {});
+db.query(`ALTER TABLE plan_items ADD COLUMN IF NOT EXISTS calories INT`).catch(() => {});
+db.query(`ALTER TABLE completions ADD COLUMN IF NOT EXISTS replacement_calories INT`).catch(() => {});
 db.query(`
   CREATE TABLE IF NOT EXISTS telegram_link_codes (
     code TEXT NOT NULL,

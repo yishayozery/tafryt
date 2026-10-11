@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { lookupCalories } = require('../services/calories');
 
 const router = express.Router({ mergeParams: true });
 
@@ -22,7 +23,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 // הוספת שורה
 router.post('/', requireAuth, async (req, res) => {
-  const { day_of_week, specific_date, scheduled_time, item_name, quantity } = req.body;
+  const { day_of_week, specific_date, scheduled_time, item_name, quantity, calories } = req.body;
   if (!scheduled_time || !item_name) {
     return res.status(400).json({ error: 'שעה ופריט הם שדות חובה' });
   }
@@ -35,11 +36,18 @@ router.post('/', requireAuth, async (req, res) => {
     if (!plan) return res.status(403).json({ error: 'אין הרשאה' });
 
     const { rows } = await db.query(
-      `INSERT INTO plan_items (plan_id, day_of_week, specific_date, scheduled_time, item_name, quantity)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [req.params.planId, day_of_week ?? null, specific_date ?? null, scheduled_time, item_name, quantity ?? null]
+      `INSERT INTO plan_items (plan_id, day_of_week, specific_date, scheduled_time, item_name, quantity, calories)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.params.planId, day_of_week ?? null, specific_date ?? null, scheduled_time, item_name, quantity ?? null, calories ?? null]
     );
     res.status(201).json(rows[0]);
+
+    // חיפוש קלוריות ברקע אם לא סופקו
+    if (calories == null) {
+      lookupCalories(item_name, quantity).then(cal => {
+        if (cal) db.query('UPDATE plan_items SET calories=$1 WHERE id=$2', [cal, rows[0].id]).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה פנימית' });
@@ -68,11 +76,11 @@ router.post('/duplicate-day', requireAuth, async (req, res) => {
       if (day === source_day) continue;
       for (const item of sourceItems) {
         const { rows } = await db.query(
-          `INSERT INTO plan_items (plan_id, day_of_week, scheduled_time, item_name, quantity)
-           VALUES ($1,$2,$3,$4,$5)
+          `INSERT INTO plan_items (plan_id, day_of_week, scheduled_time, item_name, quantity, calories)
+           VALUES ($1,$2,$3,$4,$5,$6)
            ON CONFLICT DO NOTHING
            RETURNING *`,
-          [req.params.planId, day, item.scheduled_time, item.item_name, item.quantity]
+          [req.params.planId, day, item.scheduled_time, item.item_name, item.quantity, item.calories]
         );
         if (rows.length > 0) created.push(rows[0]);
       }
@@ -86,7 +94,7 @@ router.post('/duplicate-day', requireAuth, async (req, res) => {
 
 // עדכון שורה
 router.put('/:itemId', requireAuth, async (req, res) => {
-  const { day_of_week, specific_date, scheduled_time, item_name, quantity, apply_from_date, apply_to_date } = req.body;
+  const { day_of_week, specific_date, scheduled_time, item_name, quantity, calories, apply_from_date, apply_to_date } = req.body;
   try {
     const plan = await getPlanWithAccess(req.params.planId, req.user.id, 'supervisor');
     if (!plan) return res.status(403).json({ error: 'אין הרשאה' });
@@ -98,16 +106,24 @@ router.put('/:itemId', requireAuth, async (req, res) => {
     if (existing.rows.length === 0) return res.status(404).json({ error: 'שורה לא נמצאה' });
     const item = existing.rows[0];
 
+    const newName = item_name ?? item.item_name;
+    const newQty  = quantity  ?? item.quantity;
+    // אם הועבר calories=null במפורש, נאפס ונחפש מחדש; אחרת שומרים את הקיים
+    const newCalories = Object.prototype.hasOwnProperty.call(req.body, 'calories')
+      ? (calories ?? null)
+      : item.calories;
+
     const { rows } = await db.query(
       `UPDATE plan_items SET
-         day_of_week=$1, specific_date=$2, scheduled_time=$3, item_name=$4, quantity=$5
-       WHERE id=$6 RETURNING *`,
+         day_of_week=$1, specific_date=$2, scheduled_time=$3, item_name=$4, quantity=$5, calories=$6
+       WHERE id=$7 RETURNING *`,
       [
         day_of_week ?? item.day_of_week,
         specific_date ?? item.specific_date,
         scheduled_time ?? item.scheduled_time,
-        item_name ?? item.item_name,
-        quantity ?? item.quantity,
+        newName,
+        newQty,
+        newCalories,
         req.params.itemId,
       ]
     );
@@ -128,6 +144,13 @@ router.put('/:itemId', requireAuth, async (req, res) => {
     }
 
     res.json(rows[0]);
+
+    // חיפוש קלוריות ברקע אם שם הפריט השתנה או קלוריות לא ידועות
+    if (newCalories == null) {
+      lookupCalories(newName, newQty).then(cal => {
+        if (cal) db.query('UPDATE plan_items SET calories=$1 WHERE id=$2', [cal, rows[0].id]).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (err) {
     res.status(500).json({ error: 'שגיאה פנימית' });
   }

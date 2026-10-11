@@ -5,6 +5,7 @@ const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { sendPush } = require('../services/push');
 const { sendMessage: sendTelegram } = require('../services/telegram');
+const { lookupCalories } = require('../services/calories');
 
 const router = express.Router({ mergeParams: true });
 
@@ -207,6 +208,11 @@ router.post('/:completionId/replace', requireAuth, upload.single('photo'), async
       [replaced_with, photo_url, completedAt, comp.id]
     );
     res.json(rows[0]);
+
+    // חיפוש קלוריות להחלפה ברקע
+    lookupCalories(replaced_with).then(cal => {
+      if (cal) db.query('UPDATE completions SET replacement_calories=$1 WHERE id=$2', [cal, comp.id]).catch(() => {});
+    }).catch(() => {});
   } catch (err) {
     res.status(500).json({ error: 'שגיאה פנימית' });
   }
@@ -224,8 +230,8 @@ router.get('/replacements', requireAuth, async (req, res) => {
     const fromDate = from || new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
 
     const { rows } = await db.query(
-      `SELECT c.date, c.completed_at, c.replaced_with,
-              pi.item_name, pi.quantity, pi.scheduled_time
+      `SELECT c.id, c.date, c.completed_at, c.replaced_with, c.replacement_calories,
+              pi.item_name, pi.quantity, pi.scheduled_time, pi.calories
        FROM completions c
        JOIN plan_items pi ON pi.id = c.plan_item_id
        WHERE pi.plan_id = $1

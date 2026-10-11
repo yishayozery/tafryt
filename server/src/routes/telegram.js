@@ -82,12 +82,19 @@ async function handleMessage(msg) {
   const text = (msg.text || '').trim();
   const photo = msg.photo;
 
+  // /היום — daily summary for supervisor
+  if (text === '/היום' || text === '/today') {
+    await handleDailySummary(chatId);
+    return;
+  }
+
   // /start — welcome
   if (text === '/start') {
     await sendMessage(chatId,
       '👋 שלום! אני הבוט של <b>תפריט מבוקר</b>.\n\n' +
       'כדי לקבל התראות, פתח את האפליקציה → הגדרות התראות → חבר טלגרם\n' +
-      'ושלח לי את הקוד שתקבל שם.'
+      'ושלח לי את הקוד שתקבל שם.\n\n' +
+      '📊 שלח <b>/היום</b> לסיכום יומי עם קלוריות (למבקר).'
     );
     return;
   }
@@ -110,7 +117,7 @@ async function handleMessage(msg) {
     return;
   }
 
-  await sendMessage(chatId, '🤔 לא הבנתי. שלח קוד חיבור מהאפליקציה, או שלח תמונה כדי לדווח על ביצוע.');
+  await sendMessage(chatId, '🤔 לא הבנתי.\n• שלח קוד חיבור מהאפליקציה\n• שלח תמונה לדיווח ביצוע\n• שלח /היום לסיכום יומי');
 }
 
 async function handleLinkCode(chatId, code) {
@@ -209,6 +216,84 @@ async function handleCallback(cbq) {
       await answerCallbackQuery(cbq.id, '❌ שגיאה');
     }
   }
+}
+
+async function handleDailySummary(chatId) {
+  const { rows: users } = await db.query(
+    'SELECT id FROM users WHERE telegram_chat_id=$1', [String(chatId)]
+  );
+  if (!users.length) {
+    await sendMessage(chatId, '⚠️ החשבון שלך לא מחובר. פתח את האפליקציה וחבר טלגרם.');
+    return;
+  }
+  const userId = users[0].id;
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+
+  const { rows: comps } = await db.query(`
+    SELECT c.status, c.replaced_with, c.replacement_calories,
+           pi.item_name, pi.scheduled_time, pi.calories,
+           p.name AS plan_name, u.display_name AS monitored_name
+    FROM completions c
+    JOIN plan_items pi ON pi.id = c.plan_item_id
+    JOIN plans p ON p.id = pi.plan_id
+    JOIN users u ON u.id = p.monitored_id
+    WHERE p.supervisor_id = $1 AND c.date = $2
+    ORDER BY pi.scheduled_time
+  `, [userId, todayStr]);
+
+  if (!comps.length) {
+    await sendMessage(chatId, `📊 אין נתונים להיום (${todayStr})`);
+    return;
+  }
+
+  const done     = comps.filter(c => c.status === 'done');
+  const replaced = comps.filter(c => c.status === 'replaced');
+  const missed   = comps.filter(c => c.status === 'missed');
+  const pending  = comps.filter(c => c.status === 'pending');
+
+  const plannedCal      = comps.reduce((s, c) => s + (c.calories || 0), 0);
+  const doneCal         = done.reduce((s, c) => s + (c.calories || 0), 0);
+  const replacedPlanCal = replaced.reduce((s, c) => s + (c.calories || 0), 0);
+  const replacedActCal  = replaced.reduce((s, c) => s + (c.replacement_calories || 0), 0);
+  const actualCal       = doneCal + replacedActCal;
+  const calDiff         = actualCal - (doneCal + replacedPlanCal);
+
+  const lines = [
+    `📊 <b>סיכום יומי — ${todayStr}</b>`,
+    '',
+    `✅ בוצע: ${done.length}  🔄 הוחלף: ${replaced.length}  ❌ לא דווח: ${missed.length}  ⏳ ממתין: ${pending.length}`,
+  ];
+
+  if (plannedCal > 0) {
+    lines.push('', `🔢 <b>קלוריות:</b>`);
+    lines.push(`  מתוכנן: ${plannedCal} קל׳`);
+    lines.push(`  בוצע (מתוכנן): ${doneCal} קל׳`);
+    if (replaced.length > 0) {
+      const actStr = replacedActCal > 0 ? `${replacedActCal} קל׳` : '?';
+      lines.push(`  הוחלף: ${replacedPlanCal} קל׳ → ${actStr}`);
+    }
+    if (actualCal > 0) {
+      const sign = calDiff >= 0 ? `+${calDiff}` : String(calDiff);
+      lines.push(`  <b>סה״כ בפועל: ${actualCal} קל׳ (${sign})</b>`);
+    }
+  }
+
+  if (replaced.length > 0) {
+    lines.push('', `🔄 <b>החלפות:</b>`);
+    for (const r of replaced) {
+      const cal = r.replacement_calories ? ` (${r.replacement_calories} קל׳)` : '';
+      lines.push(`  ${r.scheduled_time?.slice(0, 5)} ${r.item_name} → ${r.replaced_with}${cal}`);
+    }
+  }
+
+  if (missed.length > 0) {
+    lines.push('', `❌ <b>לא דווח:</b>`);
+    for (const r of missed) {
+      lines.push(`  ${r.scheduled_time?.slice(0, 5)} ${r.item_name}`);
+    }
+  }
+
+  await sendMessage(chatId, lines.join('\n'));
 }
 
 async function notifySupervisorOnDone(completionId, itemName) {

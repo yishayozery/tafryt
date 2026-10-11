@@ -22,15 +22,26 @@ export default function ReplacementsView() {
       .then(r => { setRows(r.data); setLoading(false); });
   }, [id, from, to]);
 
+  function calDiff(r) {
+    if (r.calories == null || r.replacement_calories == null) return null;
+    return r.replacement_calories - r.calories;
+  }
+
   function exportExcel() {
-    const data = rows.map(r => ({
-      'תאריך': r.date?.slice(0, 10),
-      'שעה מתוכננת': r.scheduled_time?.slice(0, 5),
-      'שם פריט': r.item_name,
-      'כמות': r.quantity || '',
-      'הוחלף ב': r.replaced_with,
-      'זמן דיווח': r.completed_at ? formatTime(r.completed_at) : '',
-    }));
+    const data = rows.map(r => {
+      const diff = calDiff(r);
+      return {
+        'תאריך': r.date?.slice(0, 10),
+        'שעה מתוכננת': r.scheduled_time?.slice(0, 5),
+        'שם פריט': r.item_name,
+        'קל\' מקורי': r.calories ?? '',
+        'כמות': r.quantity || '',
+        'הוחלף ב': r.replaced_with,
+        'קל\' בפועל': r.replacement_calories ?? '',
+        'הפרש קל\'': diff != null ? (diff >= 0 ? `+${diff}` : String(diff)) : '',
+        'זמן דיווח': r.completed_at ? formatTime(r.completed_at) : '',
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(data);
     ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 20 }, { wch: 12 }];
     const wb = XLSX.utils.book_new();
@@ -42,9 +53,11 @@ export default function ReplacementsView() {
     if (!rows.length) return;
     const lines = [`*החלפות — ${plan?.name || ''}*`, `${from} עד ${to}`, ''];
     for (const r of rows) {
+      const diff = calDiff(r);
+      const diffStr = diff != null ? ` (${diff >= 0 ? '+' : ''}${diff} קל׳)` : '';
       lines.push(`📅 ${r.date?.slice(0, 10)} | ⏰ ${r.scheduled_time?.slice(0, 5)}`);
-      lines.push(`❌ ${r.item_name}${r.quantity ? ` (${r.quantity})` : ''}`);
-      lines.push(`✅ ${r.replaced_with}`);
+      lines.push(`❌ ${r.item_name}${r.calories ? ` — ${r.calories} קל׳` : ''}${r.quantity ? ` (${r.quantity})` : ''}`);
+      lines.push(`✅ ${r.replaced_with}${r.replacement_calories ? ` — ${r.replacement_calories} קל׳` : ''}${diffStr}`);
       lines.push('');
     }
     const text = lines.join('\n');
@@ -91,27 +104,56 @@ export default function ReplacementsView() {
           </div>
         )}
 
+        {/* סיכום קלוריות */}
+        {!loading && rows.length > 0 && (() => {
+          const withCal = rows.filter(r => r.calories != null && r.replacement_calories != null);
+          if (!withCal.length) return null;
+          const totalPlanned  = withCal.reduce((s, r) => s + r.calories, 0);
+          const totalActual   = withCal.reduce((s, r) => s + r.replacement_calories, 0);
+          const totalDiff     = totalActual - totalPlanned;
+          const diffColor = totalDiff > 0 ? 'var(--red, #e53e3e)' : totalDiff < 0 ? 'var(--green)' : 'var(--gray-600)';
+          return (
+            <div style={{ background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: '0.85rem', display: 'flex', gap: 20 }}>
+              <span>מתוכנן: <b>{totalPlanned} קל׳</b></span>
+              <span>בפועל: <b>{totalActual} קל׳</b></span>
+              <span>הפרש: <b style={{ color: diffColor }}>{totalDiff >= 0 ? '+' : ''}{totalDiff} קל׳</b></span>
+            </div>
+          );
+        })()}
+
         {/* טבלה */}
         {!loading && rows.length > 0 && (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
                 <tr style={{ background: 'var(--gray-100)', textAlign: 'right' }}>
-                  {['תאריך', 'שעה', 'פריט', 'כמות', 'הוחלף ב'].map(h => (
+                  {['תאריך', 'שעה', 'פריט', 'קל׳', 'הוחלף ב', 'קל׳ בפועל', 'הפרש'].map(h => (
                     <th key={h} style={{ padding: '8px 10px', fontWeight: 700, borderBottom: '2px solid var(--gray-200)', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--gray-100)', background: i % 2 === 0 ? '#fff' : 'var(--gray-50)' }}>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.date?.slice(0, 10)}</td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: 'var(--green)', fontWeight: 700 }}>{r.scheduled_time?.slice(0, 5)}</td>
-                    <td style={{ padding: '8px 10px' }}>{r.item_name}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--gray-600)', fontSize: '0.8rem' }}>{r.quantity || '—'}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--orange)', fontWeight: 600 }}>{r.replaced_with}</td>
-                  </tr>
-                ))}
+                {rows.map((r, i) => {
+                  const diff = calDiff(r);
+                  const diffColor = diff == null ? 'inherit' : diff > 0 ? 'var(--red, #e53e3e)' : diff < 0 ? 'var(--green)' : 'var(--gray-600)';
+                  return (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--gray-100)', background: i % 2 === 0 ? '#fff' : 'var(--gray-50)' }}>
+                      <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.date?.slice(0, 10)}</td>
+                      <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: 'var(--green)', fontWeight: 700 }}>{r.scheduled_time?.slice(0, 5)}</td>
+                      <td style={{ padding: '8px 10px' }}>{r.item_name}</td>
+                      <td style={{ padding: '8px 10px', color: 'var(--gray-500)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                        {r.calories != null ? `${r.calories} קל׳` : '—'}
+                      </td>
+                      <td style={{ padding: '8px 10px', color: 'var(--orange)', fontWeight: 600 }}>{r.replaced_with}</td>
+                      <td style={{ padding: '8px 10px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                        {r.replacement_calories != null ? `${r.replacement_calories} קל׳` : <span style={{ color: 'var(--gray-400)' }}>⏳</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', fontWeight: 700, whiteSpace: 'nowrap', color: diffColor }}>
+                        {diff != null ? `${diff >= 0 ? '+' : ''}${diff}` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             <div style={{ marginTop: 10, fontSize: '0.78rem', color: 'var(--gray-500)', textAlign: 'center' }}>
