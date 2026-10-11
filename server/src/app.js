@@ -47,6 +47,13 @@ db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT`).cat
 db.query(`ALTER TABLE plan_items ADD COLUMN IF NOT EXISTS calories INT`).catch(() => {});
 db.query(`ALTER TABLE completions ADD COLUMN IF NOT EXISTS replacement_calories INT`).catch(() => {});
 db.query(`
+  CREATE TABLE IF NOT EXISTS food_calories_cache (
+    name TEXT PRIMARY KEY,
+    calories INT NOT NULL,
+    looked_up_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(() => {});
+db.query(`
   CREATE TABLE IF NOT EXISTS telegram_link_codes (
     code TEXT NOT NULL,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { refreshPlanCalories } = require('../services/calories');
 
 const router = express.Router();
 
@@ -80,6 +81,27 @@ router.get('/plans', requireAuth, requireAdmin, async (req, res) => {
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'שגיאה פנימית' });
+  }
+});
+
+// POST /api/admin/refresh-calories — חישוב קלוריות לכל פריטי התפריט
+router.post('/refresh-calories', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await refreshPlanCalories();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/calories-cache — צפייה ב-cache
+router.get('/calories-cache', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await db.query('SELECT * FROM food_calories_cache ORDER BY name');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
