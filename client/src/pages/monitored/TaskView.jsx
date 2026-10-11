@@ -30,6 +30,34 @@ export default function TaskView() {
   const [retroTime, setRetroTime] = useState(''); // ISO datetime-local string
   const photoRef = useRef();
 
+  const [tgLinked, setTgLinked] = useState(null); // null=loading, true/false
+  const [tgCode, setTgCode] = useState(null);
+  const [tgBotUrl, setTgBotUrl] = useState('');
+  const [tgLoading, setTgLoading] = useState(false);
+
+  useEffect(() => {
+    api.get('/telegram/status').then(r => setTgLinked(r.data.linked)).catch(() => setTgLinked(false));
+  }, []);
+
+  async function connectTelegram() {
+    setTgLoading(true);
+    try {
+      const { data } = await api.post('/telegram/link');
+      setTgCode(data.code);
+      setTgBotUrl(data.bot_url);
+    } catch {
+      alert('שגיאה בקבלת קוד — נסה שוב');
+    } finally {
+      setTgLoading(false);
+    }
+  }
+
+  function dismissTgSheet() {
+    setTgCode(null);
+    // recheck status after dismissal
+    api.get('/telegram/status').then(r => setTgLinked(r.data.linked)).catch(() => {});
+  }
+
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const isToday = selectedDate === todayStr;
@@ -247,6 +275,45 @@ export default function TaskView() {
           <div className="push-banner">
             <p>הפעל התראות כדי לקבל תזכורות לארוחות</p>
             <button className="btn btn-primary btn-sm" onClick={requestPermission}>הפעל</button>
+          </div>
+        )}
+
+        {tgLinked === false && (
+          <div className="push-banner" style={{ background: 'var(--blue-50, #ebf8ff)', borderColor: 'var(--blue-200, #bee3f8)' }}>
+            <p>חבר טלגרם לקבלת תזכורות ישירות לנייד</p>
+            <button className="btn btn-primary btn-sm" onClick={connectTelegram} disabled={tgLoading}>
+              {tgLoading ? '...' : 'חבר'}
+            </button>
+          </div>
+        )}
+
+        {tgCode && (
+          <div className="action-sheet">
+            <div className="action-sheet-bg" onClick={dismissTgSheet} />
+            <div className="action-sheet-content" style={{ textAlign: 'center' }}>
+              <h2 className="action-sheet-title">חיבור טלגרם</h2>
+              <p style={{ color: 'var(--gray-600)', marginBottom: 20, fontSize: '0.9rem', lineHeight: 1.6 }}>
+                פתח את הבוט בטלגרם ושלח לו את הקוד הבא:
+              </p>
+              <div style={{
+                fontFamily: 'monospace', fontSize: '2rem', fontWeight: 900,
+                letterSpacing: '0.2em', color: 'var(--green)',
+                background: 'var(--gray-100)', borderRadius: 12, padding: '16px 24px',
+                marginBottom: 24, userSelect: 'all',
+              }}>
+                {tgCode}
+              </div>
+              <a
+                href={tgBotUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary btn-full"
+                style={{ marginBottom: 10, display: 'block' }}
+              >
+                פתח את הבוט בטלגרם
+              </a>
+              <button className="btn btn-ghost btn-full" onClick={dismissTgSheet}>סגור</button>
+            </div>
           </div>
         )}
 
