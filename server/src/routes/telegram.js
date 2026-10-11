@@ -265,23 +265,23 @@ async function handleDailySummary(chatId) {
   ];
 
   if (plannedCal > 0) {
-    lines.push('', `🔢 <b>קלוריות:</b>`);
-    lines.push(`  מתוכנן: ${plannedCal} קל׳`);
-    lines.push(`  בוצע (מתוכנן): ${doneCal} קל׳`);
+    lines.push('', `🔢 <b>קלוריות (מוערך):</b>`);
+    lines.push(`  מתוכנן: ~${plannedCal} קל׳`);
+    lines.push(`  בוצע (מתוכנן): ~${doneCal} קל׳`);
     if (replaced.length > 0) {
-      const actStr = replacedActCal > 0 ? `${replacedActCal} קל׳` : '?';
-      lines.push(`  הוחלף: ${replacedPlanCal} קל׳ → ${actStr}`);
+      const actStr = replacedActCal > 0 ? `~${replacedActCal} קל׳` : '?';
+      lines.push(`  הוחלף: ~${replacedPlanCal} קל׳ → ${actStr}`);
     }
     if (actualCal > 0) {
       const sign = calDiff >= 0 ? `+${calDiff}` : String(calDiff);
-      lines.push(`  <b>סה״כ בפועל: ${actualCal} קל׳ (${sign})</b>`);
+      lines.push(`  <b>סה״כ בפועל: ~${actualCal} קל׳ (${sign})</b>`);
     }
   }
 
   if (replaced.length > 0) {
     lines.push('', `🔄 <b>החלפות:</b>`);
     for (const r of replaced) {
-      const cal = r.replacement_calories ? ` (${r.replacement_calories} קל׳)` : '';
+      const cal = r.replacement_calories ? ` (~${r.replacement_calories} קל׳)` : '';
       lines.push(`  ${r.scheduled_time?.slice(0, 5)} ${r.item_name} → ${r.replaced_with}${cal}`);
     }
   }
